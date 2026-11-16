@@ -1,0 +1,51 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        homeassistant: ['2026.3.0', '2026.11.0']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install test dependencies
+        env:
+          HA_VERSION: ${{ matrix.homeassistant }}
+        run: python -m pip install "homeassistant==$HA_VERSION" pytest pytest-asyncio voluptuous-serialize ruff
+      - run: python -m pytest -q
+      - run: ruff check custom_components dev tests
+      - run: ruff format --check custom_components dev tests
+      - name: Check release metadata
+        env:
+          PUBLISH_REPOSITORY: ${{ github.repository }}
+          PUBLISH_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: python dev/check_release.py --repository "$PUBLISH_REPOSITORY" --tag "$PUBLISH_TAG"
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install 'playwright==1.65.2'
+      - run: python -m playwright install --with-deps chromium
+      - run: node --check custom_components/thermal_planner/frontend/panel.js
+      - name: Browser smoke check
+        run: |
+          CHROME=$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')
+          python tests/browser_smoke.py --chrome "$CHROME"

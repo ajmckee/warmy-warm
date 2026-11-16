@@ -1,0 +1,36 @@
+step:
+  name: Advance fake house
+  description: Advance only the development simulator by a fixed number of minutes.
+  fields:
+    minutes:
+      name: Simulated minutes
+      description: Does not create backdated Recorder history.
+      required: true
+      example: 60
+      selector:
+        number:
+          min: 0.01
+          max: 1440
+          step: any
+          mode: box
+reset:
+  name: Reset fake house
+  description: Reset the development house temperatures, target and mode to defaults.
+set_conditions:
+  name: Set simulated conditions
+  description: Change local simulated weather, humidity or operating mode; no external device is contacted.
+  fields:
+    outdoor:
+      selector:
+        number:
+          min: -30
+          max: 45
+    humidity:
+      selector:
+        number:
+          min: 0
+          max: 100
+    operating_mode:
+      selector:
+        select:
+          options: [space_heat, dhw, defrost, idle]

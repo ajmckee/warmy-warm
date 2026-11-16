@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a problem with Thermal Planner.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Thermal Planner version
+    validations:
+      required: true
+  - type: input
+    id: homeassistant
+    attributes:
+      label: Home Assistant version and installation type
+      placeholder: For example, 2026.11.0 on HAOS
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Explain what you expected and how to reproduce the problem. Say which dashboard tab you were using.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant errors
+      description: Remove tokens, passwords, names and addresses before sharing logs or reports. Say whether a source restoration failure is involved.
+      render: text

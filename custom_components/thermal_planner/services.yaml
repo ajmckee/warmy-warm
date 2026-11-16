@@ -1,0 +1,137 @@
+replay:
+  name: Replay historical window
+  description: Read Recorder history using saved configuration. Never sends heating
+    commands. Returns a full report.
+  fields:
+    entry_id: &id001
+      name: Configuration entry
+      required: true
+      selector:
+        config_entry:
+          integration: thermal_planner
+    start:
+      name: Start (ISO 8601 with UTC offset)
+      required: true
+      example: '2026-01-01T00:00:00+01:00'
+      selector:
+        text: null
+    end:
+      name: End (ISO 8601 with UTC offset)
+      required: true
+      example: '2026-01-01T04:00:00+01:00'
+      selector:
+        text: null
+export_csv:
+  name: Export CSV
+  description: Return CSV text and an authenticated download path for a retained report.
+  fields:
+    entry_id:
+      name: Configuration entry
+      required: true
+      selector:
+        config_entry:
+          integration: thermal_planner
+    report_id:
+      name: Report ID (omit for latest)
+      selector:
+        text: null
+run_once:
+  name: Run controlled cooldown
+  description: Pause the commissioned source within saved bounds, restore and observe
+    recovery.
+  fields:
+    entry_id: *id001
+    minutes:
+      name: Duration in real minutes
+      selector:
+        number:
+          min: 1
+          max: 720
+          mode: box
+stop_and_restore:
+  name: Stop and restore
+  description: Cancel scheduled work and retry restoration of owned settings.
+  fields:
+    entry_id: *id001
+start_campaign:
+  name: Start measurement campaign
+  description: Use the saved local start time, end date, count and pause limits.
+  fields:
+    entry_id: *id001
+fit_models:
+  name: Fit room models
+  description: Fit and validate retained measurements with chronological holdouts;
+    sends no heating commands.
+  fields:
+    entry_id: *id001
+refresh_plan:
+  name: Refresh forecast and plan
+  description: Fetch native weather forecasts and calculate a guarded recommendation;
+    sends no heating commands.
+  fields:
+    entry_id: *id001
+apply_once:
+  name: Apply one plan
+  description: Queue the current qualified plan once. Requires commissioned control.
+  fields:
+    entry_id: *id001
+    plan_id:
+      name: Current plan ID
+      required: true
+      selector:
+        text: {}
+enable_auto:
+  name: Enable automatic planning
+  description: Enable repeated qualified planning with fresh forecasts and saved safety
+    bounds.
+  fields:
+    entry_id: *id001
+    plan_id:
+      name: Current plan ID
+      required: true
+      selector:
+        text: {}
+start_flow_trial:
+  name: Run direct-flow trial
+  description: Test a bounded direct water target and restore original settings. Requires
+    explicit direct-mode configuration.
+  fields:
+    entry_id: *id001
+    minutes:
+      name: Duration in real minutes
+      selector:
+        number:
+          min: 1
+          max: 720
+          mode: box
+    flow_target:
+      name: Requested water target (°C)
+      required: true
+      selector:
+        number:
+          mode: box
+          step: 0.5
+observe_normal:
+  name: Observe normal operation
+  description: Record normal operation without sending heat commands. No commissioning
+    required.
+  fields:
+    entry_id: *id001
+    minutes:
+      name: Duration in real minutes
+      selector:
+        number:
+          min: 1
+          max: 720
+          mode: box
+commission_source:
+  name: Verify source restoration
+  description: With someone present, verify OFF and restored HEAT readbacks for the
+    explicitly enabled source.
+  fields:
+    entry_id: *id001
+    acknowledged:
+      name: Someone is present and approves this bounded test
+      required: true
+      selector:
+        boolean: {}

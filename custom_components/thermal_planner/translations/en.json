@@ -1,0 +1,509 @@
+{
+  "title": "Thermal Planner",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Thermal Planner"
+      },
+      "settings": {
+        "title": "Historical temperature inputs",
+        "description": "Temperature reports are read-only. Open Thermal Planner in the sidebar to run and review reports. Outdoor and recorded weather temperature are optional. To add a weather provider, use Settings → Devices & services → Add integration, then return here. No forecast or energy sensor is required. Freshness bounds how long a recorded state can be held; unchanged states older than this limit are conservatively unavailable.",
+        "data": {
+          "outdoor": "Measured outdoor temperature (optional)",
+          "weather": "Existing weather entity (optional)",
+          "max_age_minutes": "Maximum reading age (minutes)"
+        }
+      },
+      "room": {
+        "title": "{room_action}",
+        "description": "Add one room at a time. Select its temperature sensor, then use the same picker again to add more sensors for this room. After submitting, you can add another room or save your configuration.",
+        "data": {
+          "name": "Room name",
+          "sensors": "Temperature sensors for this room",
+          "floor": "Floor (optional)",
+          "comfort_min": "Minimum room temperature (°C)",
+          "zone": "Heat-pump zone",
+          "comfort_target": "Normal comfort target (°C)"
+        },
+        "data_description": {
+          "name": "For example, Living room or Kitchen. Each room needs a different name.",
+          "sensors": "One sensor is enough. Multiple sensors are averaged equally unless you change their weights under More room settings.",
+          "floor": "Choose an existing Home Assistant floor, or leave empty. Rooms without a floor still get their own report.",
+          "comfort_min": "Report when this room falls below this temperature. Ordinary reports do not control heating; development lab measurements are started separately.",
+          "zone": "Both radiator and underfloor rooms may share this zone of the same heat pump."
+        },
+        "sections": {
+          "advanced": {
+            "name": "More room settings",
+            "data": {
+              "circuit": "Heating circuit label (optional)",
+              "emitter": "Heating type",
+              "relative_weights": "Sensor weights (optional)",
+              "diagnostics": "Extra temperatures to record (optional)",
+              "floor_weight": "Weight in the floor average",
+              "constrains": "Include in comfort planning and first-room-to-cool result",
+              "humidity": "Relative-humidity sensor (optional)",
+              "radiant_temperature": "Measured mean radiant temperature (optional)",
+              "comfort_estimate": "Show an advisory PMV/PPD comfort estimate",
+              "assumed_met": "Assumed activity (met)",
+              "assumed_clo": "Assumed clothing insulation (clo)",
+              "assumed_air_speed": "Assumed relative air speed (m/s)"
+            },
+            "data_description": {
+              "circuit": "An optional label for rooms sharing a heating loop, for example Radiators or Underfloor loop. It does not configure valves or heating controls.",
+              "emitter": "What heats this room: radiators, underfloor heating, a mixture, or another type.",
+              "relative_weights": "Leave blank for an equal average. Otherwise enter one non-negative number per selected sensor, in order, separated by commas. At least one must be positive. For a primary sensor, use 1 for it and 0 for the others.",
+              "diagnostics": "For example, a floor-surface or heating-pipe temperature sensor. These extra readings are saved with the report data for comparison; they do not affect the room average, floor average, or minimum-temperature check.",
+              "floor_weight": "Default 1 gives each room an equal share. Use 2 for twice the share, or 0 to leave this room out of its floor average. Its own report and minimum-temperature check are kept. Has no effect without a floor.",
+              "constrains": "Use this room’s comfort target when planning shared heating, and include it in the first-room-to-cool result. Its hard minimum always applies, even when this is off.",
+              "humidity": "Optional % RH input with independent freshness/coverage. Missing humidity never removes air-temperature reports.",
+              "radiant_temperature": "Use a true mean-radiant temperature measurement, not a single floor-surface or pipe temperature. Without one, air temperature is an explicitly labelled proxy.",
+              "comfort_estimate": "Fanger PMV/PPD is an estimate under the selected clothing/activity/air-speed/radiant assumptions, not measured feels-like °C. Actual air temperature always drives guards and restoration."
+            }
+          }
+        }
+      },
+      "rooms": {
+        "title": "Rooms ({room_count})",
+        "description": "{room_list}\n\nAdd as many rooms as you need. Changes take effect when you choose Save configuration.",
+        "menu_options": {
+          "room": "{add_room_label}",
+          "edit_room": "Edit a room",
+          "remove_room": "Remove a room",
+          "save": "Save configuration",
+          "init": "Back to Thermal Planner",
+          "heat_source": "Choose or configure the heat pump",
+          "zones": "Manage heat-pump zones",
+          "energy": "Optional energy inputs"
+        }
+      },
+      "edit_room": {
+        "title": "Choose a room to edit",
+        "data": {
+          "room": "Room"
+        }
+      },
+      "remove_room": {
+        "title": "Choose a room to remove",
+        "description": "This changes future reports only. Existing reports keep their original room configuration. Choose Save configuration afterward to apply the removal.",
+        "data": {
+          "room": "Room"
+        }
+      },
+      "heat_source": {
+        "title": "One heat pump",
+        "description": "Select the one central space-heating climate when available. A heat pump can serve multiple zones; radiators and underfloor heating are room types, not separate pumps or zones. Leaving the climate empty keeps reports available in observation mode. Setup sends no commands. Real-source control stays unavailable until you explicitly commission pause and restoration while on site.",
+        "data": {
+          "name": "Heat-pump name",
+          "climate": "Central space-heating climate (optional)"
+        },
+        "data_description": {
+          "climate": "Select space heating, not a DHW-only controller. Central pauses affect the configured source; confirm what this action does to DHW, schedules and all zones before commissioning."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Telemetry, direct-flow trials and control bounds",
+            "data": {
+              "space_heating": "Space-heating delivery indication (optional)",
+              "operating_mode": "Operating-mode entity (optional)",
+              "dhw_states": "Operating-mode values meaning DHW (comma-separated)",
+              "defrost_states": "Operating-mode values meaning defrost (comma-separated)",
+              "leaving_water": "Actual leaving-water temperature (optional)",
+              "flow_readback": "Requested direct flow-temperature readback (optional)",
+              "flow_setter": "Direct flow target number (optional)",
+              "direct_mode_confirmed": "This setter controls a direct water-temperature target",
+              "flow_min": "Lowest approved direct flow target (°C)",
+              "flow_max": "Highest approved direct flow target (°C)",
+              "flow_max_step": "Maximum change per trial (°C)",
+              "disturbances": "Windows/stoves or other disturbance indicators (optional)",
+              "pause_limit_minutes": "Maximum heating pause (minutes)",
+              "dwell_minutes": "Minimum time between source changes (minutes)",
+              "recovery_minutes": "Maximum recovery observation / flow hold (minutes)",
+              "recovery_tolerance_c": "Return-to-start temperature tolerance (°C)",
+              "commissioning_allowed": "Allow a supervised commissioning run on this source",
+              "climate_target_is_flow": "Climate target mirrors this water-flow target"
+            },
+            "data_description": {
+              "commissioning_allowed": "Only enable this when you can observe the installation and have checked the configured Heat/Off actions and restore behavior. Start commissioning separately on the Thermal Planner page; this checkbox itself issues no commands. Automatic planning is a separate later opt-in.",
+              "flow_setter": "Optional HA number/input_number in °C. A readback, explicit safe limits, and direct-mode confirmation are required. Compensation curves are not edited.",
+              "disturbances": "An on/open or missing configured indicator marks measurement intervals as contaminated for learning.",
+              "recovery_tolerance_c": "Recovery means returning within this tolerance of starting air temperatures, while respecting each room minimum."
+            }
+          }
+        }
+      },
+      "zones": {
+        "title": "Heat-pump zones",
+        "description": "One heat pump serves these zones:\n\n{zone_list}\n\nRoom heating types are configured independently.",
+        "menu_options": {
+          "zone": "Add a zone",
+          "edit_zone": "Edit a zone",
+          "remove_zone": "Remove an unused zone",
+          "init": "Back to configuration",
+          "rooms": "Back to rooms"
+        }
+      },
+      "zone": {
+        "title": "Heat-pump zone",
+        "description": "A distribution zone belongs to the same heat pump. Several radiator and UFH rooms can share one zone. Optional zone climate and water/pump entities provide context; only the central source climate is commanded. Assign rooms to zones in their room forms when more than one zone exists.",
+        "data": {
+          "name": "Zone name",
+          "climate": "Zone climate (read-only context, optional)",
+          "supply": "Zone supply temperature (optional)",
+          "return": "Zone return temperature (optional)",
+          "pump": "Zone pump indication (optional)"
+        }
+      },
+      "edit_zone": {
+        "title": "Choose a zone to edit",
+        "data": {
+          "zone": "Zone"
+        }
+      },
+      "remove_zone": {
+        "title": "Choose an unused zone to remove",
+        "data": {
+          "zone": "Zone"
+        }
+      },
+      "energy": {
+        "title": "Optional heat-pump energy inputs",
+        "description": "Electrical input and delivered thermal output are independent and optional. Confirm units and scope for each. A heat-pump total including DHW is not labelled as space-heating energy. COP requires matched, positive, sufficiently covered channels.",
+        "sections": {
+          "electrical": {
+            "name": "Electrical input",
+            "data": {
+              "entity": "HA sensor (optional)",
+              "kind": "Measurement kind",
+              "scope": "What this measurement covers"
+            }
+          },
+          "thermal": {
+            "name": "Delivered thermal output",
+            "data": {
+              "entity": "HA sensor (optional)",
+              "kind": "Measurement kind",
+              "scope": "What this measurement covers"
+            }
+          }
+        }
+      },
+      "campaign_settings": {
+        "title": "Bounded measurement campaign",
+        "description": "Schedule cooldown/recovery measurements in the Home Assistant time zone. Unsafe/busy/missed nights are skipped with a reason. Ambiguous or nonexistent DST start times are skipped. Configure bounds here, save, then explicitly start the campaign on the Thermal Planner page.",
+        "data": {
+          "start_time": "Local nightly start time",
+          "nights": "Target completed cooldowns",
+          "end_date": "Campaign end date",
+          "pause_minutes": "Maximum pause for each run (minutes)",
+          "report_windows": "Report boundaries in minutes (multiples of 5, beginning with 0)",
+          "drop_thresholds": "Additional temperature drops to report (°C, comma-separated)"
+        }
+      },
+      "comfort_schedule": {
+        "title": "Comfort time blocks",
+        "description": "{blocks}\n\nTargets apply to the whole shared-source plan; this does not imply room valves. Overnight blocks use the selected start weekday. Outside blocks, the room minimum applies. Rooms without blocks use their configured comfort target.",
+        "menu_options": {
+          "comfort_blocks": "Add a comfort block",
+          "remove_comfort_block": "Remove a comfort block",
+          "init": "Back to configuration"
+        }
+      },
+      "comfort_blocks": {
+        "title": "Comfort target time block",
+        "data": {
+          "room": "Room",
+          "days": "Start weekdays",
+          "start": "Start time",
+          "end": "End time",
+          "target_c": "Target air temperature (°C)"
+        }
+      },
+      "remove_comfort_block": {
+        "title": "Remove a comfort block",
+        "data": {
+          "remove": "Comfort block"
+        }
+      }
+    },
+    "error": {
+      "invalid_units": "Select a temperature sensor with °C, °F or K units.",
+      "invalid_room": "Use a unique room name and at least one available temperature sensor. Sensor weights must be non-negative, match the selected sensors, and include at least one positive value.",
+      "last_room": "Keep at least one room.",
+      "invalid_window": "Select a past window of 1 minute to 24 hours. Ambiguous/skipped DST times require the replay action with explicit offsets.",
+      "replay_failed": "Replay failed. Check Recorder availability and try again.",
+      "invalid_heat_source": "Check climate Heat/Off capability, °C direct-flow setter/readback and explicit flow/control limits.",
+      "invalid_zone": "Use a unique zone name and supported temperature units.",
+      "zone_in_use": "Keep at least one zone. Reassign its rooms before removing it.",
+      "invalid_energy": "Choose W/kW power or Wh/kWh counters matching the selected sensor, and confirm scope.",
+      "invalid_campaign": "Check local time, date, source pause limit, increasing five-minute report boundaries and positive drop thresholds.",
+      "invalid_comfort_block": "Choose a room, one or more weekdays and valid target times."
+    },
+    "abort": {
+      "single_instance_allowed": "Only one Thermal Planner configuration is needed."
+    }
+  },
+  "options": {
+    "step": {
+      "settings": {
+        "title": "Historical temperature inputs",
+        "description": "Temperature reports are read-only. Open Thermal Planner in the sidebar to run and review reports. Outdoor and recorded weather temperature are optional. To add a weather provider, use Settings → Devices & services → Add integration, then return here. No forecast or energy sensor is required. Freshness bounds how long a recorded state can be held; unchanged states older than this limit are conservatively unavailable.",
+        "data": {
+          "outdoor": "Measured outdoor temperature (optional)",
+          "weather": "Existing weather entity (optional)",
+          "max_age_minutes": "Maximum reading age (minutes)"
+        }
+      },
+      "room": {
+        "title": "{room_action}",
+        "description": "Add one room at a time. Select its temperature sensor, then use the same picker again to add more sensors for this room. After submitting, you can add another room or save your configuration.",
+        "data": {
+          "name": "Room name",
+          "sensors": "Temperature sensors for this room",
+          "floor": "Floor (optional)",
+          "comfort_min": "Minimum room temperature (°C)",
+          "zone": "Heat-pump zone",
+          "comfort_target": "Normal comfort target (°C)"
+        },
+        "data_description": {
+          "name": "For example, Living room or Kitchen. Each room needs a different name.",
+          "sensors": "One sensor is enough. Multiple sensors are averaged equally unless you change their weights under More room settings.",
+          "floor": "Choose an existing Home Assistant floor, or leave empty. Rooms without a floor still get their own report.",
+          "comfort_min": "Report when this room falls below this temperature. Ordinary reports do not control heating; development lab measurements are started separately.",
+          "zone": "Both radiator and underfloor rooms may share this zone of the same heat pump."
+        },
+        "sections": {
+          "advanced": {
+            "name": "More room settings",
+            "data": {
+              "circuit": "Heating circuit label (optional)",
+              "emitter": "Heating type",
+              "relative_weights": "Sensor weights (optional)",
+              "diagnostics": "Extra temperatures to record (optional)",
+              "floor_weight": "Weight in the floor average",
+              "constrains": "Include in comfort planning and first-room-to-cool result",
+              "humidity": "Relative-humidity sensor (optional)",
+              "radiant_temperature": "Measured mean radiant temperature (optional)",
+              "comfort_estimate": "Show an advisory PMV/PPD comfort estimate",
+              "assumed_met": "Assumed activity (met)",
+              "assumed_clo": "Assumed clothing insulation (clo)",
+              "assumed_air_speed": "Assumed relative air speed (m/s)"
+            },
+            "data_description": {
+              "circuit": "An optional label for rooms sharing a heating loop, for example Radiators or Underfloor loop. It does not configure valves or heating controls.",
+              "emitter": "What heats this room: radiators, underfloor heating, a mixture, or another type.",
+              "relative_weights": "Leave blank for an equal average. Otherwise enter one non-negative number per selected sensor, in order, separated by commas. At least one must be positive. For a primary sensor, use 1 for it and 0 for the others.",
+              "diagnostics": "For example, a floor-surface or heating-pipe temperature sensor. These extra readings are saved with the report data for comparison; they do not affect the room average, floor average, or minimum-temperature check.",
+              "floor_weight": "Default 1 gives each room an equal share. Use 2 for twice the share, or 0 to leave this room out of its floor average. Its own report and minimum-temperature check are kept. Has no effect without a floor.",
+              "constrains": "Use this room’s comfort target when planning shared heating, and include it in the first-room-to-cool result. Its hard minimum always applies, even when this is off.",
+              "humidity": "Optional % RH input with independent freshness/coverage. Missing humidity never removes air-temperature reports.",
+              "radiant_temperature": "Use a true mean-radiant temperature measurement, not a single floor-surface or pipe temperature. Without one, air temperature is an explicitly labelled proxy.",
+              "comfort_estimate": "Fanger PMV/PPD is an estimate under the selected clothing/activity/air-speed/radiant assumptions, not measured feels-like °C. Actual air temperature always drives guards and restoration."
+            }
+          }
+        }
+      },
+      "init": {
+        "title": "Thermal Planner",
+        "description": "Manage your rooms and temperature inputs here. For analysis and saved reports, open [Thermal Planner in the sidebar](/thermal-planner). Changes take effect after Save configuration. Existing reports keep their original settings.",
+        "menu_options": {
+          "rooms": "Manage rooms — add, edit or remove",
+          "settings": "Outdoor inputs and freshness",
+          "save": "Save configuration",
+          "heat_source": "Heat pump and control bounds",
+          "zones": "Heat-pump zones",
+          "energy": "Optional energy inputs",
+          "campaign_settings": "Campaign schedule and report windows",
+          "comfort_schedule": "Comfort time blocks"
+        }
+      },
+      "edit_room": {
+        "title": "Choose a room to edit",
+        "data": {
+          "room": "Room"
+        }
+      },
+      "remove_room": {
+        "title": "Choose a room to remove",
+        "description": "This changes future reports only. Existing reports keep their original room configuration. Choose Save configuration afterward to apply the removal.",
+        "data": {
+          "room": "Room"
+        }
+      },
+      "replay": {
+        "title": "Replay historical window",
+        "description": "Select a past window from 1 minute to 24 hours in your Home Assistant time zone. Ambiguous or skipped DST times are rejected; use the replay action with explicit offsets for those times. No heating commands are sent.",
+        "data": {
+          "start": "Start",
+          "end": "End"
+        }
+      },
+      "report": {
+        "title": "Cooldown report",
+        "description": "{report}\n\nConfiguration entry: `{entry_id}`"
+      },
+      "rooms": {
+        "title": "Rooms ({room_count})",
+        "description": "{room_list}\n\nAdd as many rooms as you need. Changes take effect when you choose Save configuration.",
+        "menu_options": {
+          "room": "{add_room_label}",
+          "edit_room": "Edit a room",
+          "remove_room": "Remove a room",
+          "save": "Save configuration",
+          "init": "Back to Thermal Planner",
+          "heat_source": "Choose or configure the heat pump",
+          "zones": "Manage heat-pump zones",
+          "energy": "Optional energy inputs"
+        }
+      },
+      "heat_source": {
+        "title": "One heat pump",
+        "description": "Select the one central space-heating climate when available. A heat pump can serve multiple zones; radiators and underfloor heating are room types, not separate pumps or zones. Leaving the climate empty keeps reports available in observation mode. Setup sends no commands. Real-source control stays unavailable until you explicitly commission pause and restoration while on site.",
+        "data": {
+          "name": "Heat-pump name",
+          "climate": "Central space-heating climate (optional)"
+        },
+        "data_description": {
+          "climate": "Select space heating, not a DHW-only controller. Central pauses affect the configured source; confirm what this action does to DHW, schedules and all zones before commissioning."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Telemetry, direct-flow trials and control bounds",
+            "data": {
+              "space_heating": "Space-heating delivery indication (optional)",
+              "operating_mode": "Operating-mode entity (optional)",
+              "dhw_states": "Operating-mode values meaning DHW (comma-separated)",
+              "defrost_states": "Operating-mode values meaning defrost (comma-separated)",
+              "leaving_water": "Actual leaving-water temperature (optional)",
+              "flow_readback": "Requested direct flow-temperature readback (optional)",
+              "flow_setter": "Direct flow target number (optional)",
+              "direct_mode_confirmed": "This setter controls a direct water-temperature target",
+              "flow_min": "Lowest approved direct flow target (°C)",
+              "flow_max": "Highest approved direct flow target (°C)",
+              "flow_max_step": "Maximum change per trial (°C)",
+              "disturbances": "Windows/stoves or other disturbance indicators (optional)",
+              "pause_limit_minutes": "Maximum heating pause (minutes)",
+              "dwell_minutes": "Minimum time between source changes (minutes)",
+              "recovery_minutes": "Maximum recovery observation / flow hold (minutes)",
+              "recovery_tolerance_c": "Return-to-start temperature tolerance (°C)",
+              "commissioning_allowed": "Allow a supervised commissioning run on this source",
+              "climate_target_is_flow": "Climate target mirrors this water-flow target"
+            },
+            "data_description": {
+              "commissioning_allowed": "Only enable this when you can observe the installation and have checked the configured Heat/Off actions and restore behavior. Start commissioning separately on the Thermal Planner page; this checkbox itself issues no commands. Automatic planning is a separate later opt-in.",
+              "flow_setter": "Optional HA number/input_number in °C. A readback, explicit safe limits, and direct-mode confirmation are required. Compensation curves are not edited.",
+              "disturbances": "An on/open or missing configured indicator marks measurement intervals as contaminated for learning.",
+              "recovery_tolerance_c": "Recovery means returning within this tolerance of starting air temperatures, while respecting each room minimum."
+            }
+          }
+        }
+      },
+      "zones": {
+        "title": "Heat-pump zones",
+        "description": "One heat pump serves these zones:\n\n{zone_list}\n\nRoom heating types are configured independently.",
+        "menu_options": {
+          "zone": "Add a zone",
+          "edit_zone": "Edit a zone",
+          "remove_zone": "Remove an unused zone",
+          "init": "Back to configuration",
+          "rooms": "Back to rooms"
+        }
+      },
+      "zone": {
+        "title": "Heat-pump zone",
+        "description": "A distribution zone belongs to the same heat pump. Several radiator and UFH rooms can share one zone. Optional zone climate and water/pump entities provide context; only the central source climate is commanded. Assign rooms to zones in their room forms when more than one zone exists.",
+        "data": {
+          "name": "Zone name",
+          "climate": "Zone climate (read-only context, optional)",
+          "supply": "Zone supply temperature (optional)",
+          "return": "Zone return temperature (optional)",
+          "pump": "Zone pump indication (optional)"
+        }
+      },
+      "edit_zone": {
+        "title": "Choose a zone to edit",
+        "data": {
+          "zone": "Zone"
+        }
+      },
+      "remove_zone": {
+        "title": "Choose an unused zone to remove",
+        "data": {
+          "zone": "Zone"
+        }
+      },
+      "energy": {
+        "title": "Optional heat-pump energy inputs",
+        "description": "Electrical input and delivered thermal output are independent and optional. Confirm units and scope for each. A heat-pump total including DHW is not labelled as space-heating energy. COP requires matched, positive, sufficiently covered channels.",
+        "sections": {
+          "electrical": {
+            "name": "Electrical input",
+            "data": {
+              "entity": "HA sensor (optional)",
+              "kind": "Measurement kind",
+              "scope": "What this measurement covers"
+            }
+          },
+          "thermal": {
+            "name": "Delivered thermal output",
+            "data": {
+              "entity": "HA sensor (optional)",
+              "kind": "Measurement kind",
+              "scope": "What this measurement covers"
+            }
+          }
+        }
+      },
+      "campaign_settings": {
+        "title": "Bounded measurement campaign",
+        "description": "Schedule cooldown/recovery measurements in the Home Assistant time zone. Unsafe/busy/missed nights are skipped with a reason. Ambiguous or nonexistent DST start times are skipped. Configure bounds here, save, then explicitly start the campaign on the Thermal Planner page.",
+        "data": {
+          "start_time": "Local nightly start time",
+          "nights": "Target completed cooldowns",
+          "end_date": "Campaign end date",
+          "pause_minutes": "Maximum pause for each run (minutes)",
+          "report_windows": "Report boundaries in minutes (multiples of 5, beginning with 0)",
+          "drop_thresholds": "Additional temperature drops to report (°C, comma-separated)"
+        }
+      },
+      "comfort_schedule": {
+        "title": "Comfort time blocks",
+        "description": "{blocks}\n\nTargets apply to the whole shared-source plan; this does not imply room valves. Overnight blocks use the selected start weekday. Outside blocks, the room minimum applies. Rooms without blocks use their configured comfort target.",
+        "menu_options": {
+          "comfort_blocks": "Add a comfort block",
+          "remove_comfort_block": "Remove a comfort block",
+          "init": "Back to configuration"
+        }
+      },
+      "comfort_blocks": {
+        "title": "Comfort target time block",
+        "data": {
+          "room": "Room",
+          "days": "Start weekdays",
+          "start": "Start time",
+          "end": "End time",
+          "target_c": "Target air temperature (°C)"
+        }
+      },
+      "remove_comfort_block": {
+        "title": "Remove a comfort block",
+        "data": {
+          "remove": "Comfort block"
+        }
+      }
+    },
+    "error": {
+      "invalid_units": "Select a temperature sensor with °C, °F or K units.",
+      "invalid_room": "Use a unique room name and at least one available temperature sensor. Sensor weights must be non-negative, match the selected sensors, and include at least one positive value.",
+      "last_room": "Keep at least one room.",
+      "invalid_window": "Select a past window of 1 minute to 24 hours. Ambiguous/skipped DST times require the replay action with explicit offsets.",
+      "replay_failed": "Replay failed. Check Recorder availability and try again.",
+      "invalid_heat_source": "Check climate Heat/Off capability, °C direct-flow setter/readback and explicit flow/control limits.",
+      "invalid_zone": "Use a unique zone name and supported temperature units.",
+      "zone_in_use": "Keep at least one zone. Reassign its rooms before removing it.",
+      "invalid_energy": "Choose W/kW power or Wh/kWh counters matching the selected sensor, and confirm scope.",
+      "invalid_campaign": "Check local time, date, source pause limit, increasing five-minute report boundaries and positive drop thresholds.",
+      "invalid_comfort_block": "Choose a room, one or more weekdays and valid target times."
+    }
+  }
+}

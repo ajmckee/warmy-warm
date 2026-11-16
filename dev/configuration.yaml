@@ -1,0 +1,21 @@
+# Development only: no discovery, MQTT, external devices or host networking.
+homeassistant:
+  name: Thermal Planner Lab
+  latitude: 0
+  longitude: 0
+  elevation: 0
+  unit_system: metric
+  time_zone: Europe/Warsaw
+frontend:
+config:
+history:
+logbook:
+recorder:
+  commit_interval: 1
+  purge_keep_days: 2
+thermal_planner:
+fake_house:
+  # 60x acceleration: 5 real seconds advance 5 simulated minutes.
+  # Recorder still uses real timestamps; exported fixture tests use simulated time.
+  tick_seconds: 5
+  step_minutes: 5

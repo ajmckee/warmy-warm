@@ -1,0 +1,20 @@
+# Adapt entity IDs if Home Assistant renamed them.
+type: vertical-stack
+cards:
+  - type: entities
+    title: Thermal Planner
+    entities:
+      - sensor.thermal_planner_status
+      - sensor.thermal_planner_last_report
+      - sensor.thermal_planner_first_cooling_room
+      - sensor.thermal_planner_indoor_data_quality
+      - sensor.thermal_planner_lab_run
+      - sensor.thermal_planner_planner_status
+      - sensor.thermal_planner_control_mode
+      - sensor.thermal_planner_campaign_completed
+  - type: button
+    name: Open reports
+    icon: mdi:chart-line
+    tap_action:
+      action: navigate
+      navigation_path: /thermal-planner

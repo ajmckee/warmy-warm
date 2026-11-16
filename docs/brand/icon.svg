@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Thermal Planner</title>
+  <rect width="256" height="256" rx="52" fill="#147d92"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M48 133v65h160" stroke="#fff" stroke-width="12"/>
+    <path d="m72 174 40-29 42 12 51-43" stroke="#fff" stroke-width="13"/>
+    <g stroke="#ffbd6b" stroke-width="12">
+      <path d="M83 108c-24-22 22-32 0-55"/>
+      <path d="M128 104c-24-22 22-32 0-55"/>
+      <path d="M173 100c-24-22 22-32 0-55"/>
+    </g>
+  </g>
+</svg>

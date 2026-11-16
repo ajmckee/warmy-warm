@@ -1,0 +1,9 @@
+{
+  "domain": "fake_house",
+  "name": "Fake House (development only)",
+  "version": "0.1.0",
+  "documentation": "https://github.com/home-assistant/developers.home-assistant",
+  "codeowners": [],
+  "requirements": [],
+  "iot_class": "local_push"
+}

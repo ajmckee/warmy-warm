@@ -1,0 +1,14 @@
+name: thermal-planner-dev
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.3.0
+    ports:
+      - "127.0.0.1:8123:8123"
+    environment:
+      TZ: Europe/Warsaw
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./.dev-ha:/config
+      - ./custom_components/thermal_planner:/config/custom_components/thermal_planner:ro
+      - ./dev/custom_components/fake_house:/config/custom_components/fake_house:ro
+    restart: "no"
