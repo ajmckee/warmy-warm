@@ -122,6 +122,9 @@ class ThermalPlannerPanel extends HTMLElement {
         .tabs button { flex:0 0 auto; border:0; border-bottom:3px solid transparent; border-radius:0; background:transparent; padding:14px 16px; }
         .tabs button[aria-selected="true"] { color:var(--primary-color,#147d92); border-bottom-color:var(--primary-color,#147d92); font-weight:650; }
         .page-intro { margin-bottom:22px; } .page-intro h2 { margin-bottom:6px; }
+        input[type="checkbox"] { width:auto; margin-right:8px; vertical-align:middle; }
+        #measurement-setup { max-width:920px; }
+        #measurement-setup select, #measurement-setup input:not([type="checkbox"]) { margin-bottom:14px; }
         [hidden] { display:none !important; }
         @media(max-width:900px) { .layout { grid-template-columns:minmax(0,1fr); } #saved-list { display:flex; gap:10px; overflow:auto; } .saved { min-width:220px; } }
         @media(max-width:600px) { main { padding:16px; } header { align-items:flex-start; } h1 { font-size:24px; }
@@ -155,9 +158,9 @@ class ThermalPlannerPanel extends HTMLElement {
         </section>
         <section id="page-measurements" role="tabpanel" aria-labelledby="tab-measurements" tabindex="0" hidden>
           <div class="page-intro"><h2>Measurements</h2><p class="muted">Record normal heating or run a controlled cooldown, then follow recovery.</p></div>
-          <section id="measurement-choice" class="card"></section><section id="measurement-setup" class="card" hidden></section><section id="measurement-checks" class="card" hidden></section><section id="source" class="card"></section>
+          <section id="measurement-choice" class="card"></section><section id="measurement-setup" class="card" hidden></section><div id="measurement-context"><section id="measurement-checks" class="card" hidden></section><section id="source" class="card"></section>
           <section id="lab" class="card lab" hidden></section>
-          <section id="runs" class="card"></section><section id="run-detail" class="card" hidden></section>
+          <section id="runs" class="card"></section><section id="run-detail" class="card" hidden></section></div>
         </section>
         <section id="page-learning" role="tabpanel" aria-labelledby="tab-learning" tabindex="0" hidden>
           <div class="page-intro"><h2>Learning</h2><p class="muted">See what your measurements tell us about each room and how reliable the predictions are.</p></div>
@@ -207,7 +210,7 @@ class ThermalPlannerPanel extends HTMLElement {
       this.$("#entry-picker").hidden = entries.length <= 1;
       this.$("#entry").innerHTML = entries.map((entry) => `<option value="${escapeHTML(entry.entry_id)}">${escapeHTML(entry.title)}</option>`).join("");
       this.$("#entry").value = this.entryId || "";
-      if(this.lastEntryId !== this.entryId){this.lastEntryId=this.entryId;this.$("#history-policy").value=this.entry?.history_policy||"until_changed";this.setupOpen=false;this.$("#measurement-setup").hidden=true;}
+      if(this.lastEntryId !== this.entryId){this.lastEntryId=this.entryId;this.$("#history-policy").value=this.entry?.history_policy||"until_changed";this.setupOpen=false;this.$("#measurement-setup").hidden=true;this.$("#measurement-context").hidden=false;}
       this.$("#analyse-card").hidden = !this.entry;
       if (!this.entry) {
         this.$("#saved-list").innerHTML = "<p>No accessible configuration.</p>";
@@ -303,7 +306,7 @@ class ThermalPlannerPanel extends HTMLElement {
     this.$("#report").innerHTML = `
       <div class="card"><div class="row"><h2>Temperature timeline</h2><button id="export">Export CSV</button></div>
         <p class="muted">${escapeHTML(this.time(r.start))} → ${escapeHTML(this.time(r.end))} · ${escapeHTML(this.zone)}</p>
-        ${r.unavailability_events?.length ? `<p class="notice">Recorded sensor outages are shown as gaps (${r.unavailability_events.length} events in this window). Earlier values are not carried through an outage.</p>` : ""}
+        ${r.unavailability_events?.length ? `<p class="notice">Some configured sensors recorded unknown/unavailable states (${r.unavailability_events.length} events). Their recorded values are not carried through outages.</p>` : ""}
         ${r.outdoor_assumption_c != null ? `<p class="notice"><strong>Assumed outdoor temperature: ${number(r.outdoor_assumption_c,1)}°C throughout this report.</strong> Outside-normalized cooling results use this assumption, not measured weather.</p>` : ""}
         <p><small>${r.data_policy?.history_policy === "until_changed" ? "Last known sensor readings are carried forward until the next recorded change. Recorded unavailability remains a gap; unrecorded outages cannot be detected." : "Readings expire at the configured historical freshness limit."}</small></p>
         ${this.chart(r)}
@@ -364,11 +367,13 @@ class ThermalPlannerPanel extends HTMLElement {
     this.measurementGoal ||= (this.operations?.control?.journal || this.operations?.observation || this.operations?.campaign?.active ? "cooldown" : "observe");
     this.$("#goal-help").textContent = this.measurementGoal === "observe" ? "Recommended first step. Record what your heating normally does. This does not change your heat pump and needs no pause/restore check." : "Pause the shared heat pump, then restore it and watch the rooms recover. Complete the checks below first. Water-temperature trials are optional and can wait.";
     this.$("#observe-form").hidden = this.measurementGoal !== "observe";
+    this.$("#goal-observe").classList.toggle("primary",this.measurementGoal === "observe");
+    this.$("#goal-cooldown").classList.toggle("primary",this.measurementGoal === "cooldown");
     this.$("#goal-observe").setAttribute("aria-pressed", String(this.measurementGoal === "observe"));
     this.$("#goal-cooldown").setAttribute("aria-pressed", String(this.measurementGoal === "cooldown"));
     const ops=this.operations, occupied=ops?.control?.journal || ops?.observation || ops?.baseline || ops?.campaign?.active || ops?.mode !== "advisory";
     this.$("#observe-form button").disabled = Boolean(this.busy || occupied || ops?.readiness?.can_observe === false);
-    this.$("#observation-progress").innerHTML = ops?.control?.journal || ops?.observation ? `<p>A controlled measurement ${ops.observation ? "is observing recovery" : "is running"}. Use Stop to end it and restore any settings still owned by the planner.</p><button id="stop-active-measurement">Stop and restore</button>` : ops?.baseline ? `<p>Watching normal heating until ${escapeHTML(this.time(ops.baseline.deadline))}.</p><button id="stop-observation">Stop observation</button>` : "";
+    this.$("#observation-progress").innerHTML = ops?.control?.journal || ops?.observation ? `<p>A controlled measurement ${ops.observation ? "is observing recovery" : "is running"}. Use Stop to end it and restore any settings still owned by the planner.</p><button id="stop-active-measurement">Stop and restore</button>` : ops?.baseline ? `<p>Watching normal heating until ${escapeHTML(this.time(ops.baseline.deadline))}.</p><button id="stop-observation">Stop observation</button>` : ops?.campaign?.active || ops?.mode !== "advisory" ? '<p>A heating schedule is active. Stop it before starting a manual measurement.</p><button id="stop-active-measurement">Stop scheduled heating</button>' : "";
     this.$("#stop-active-measurement")?.addEventListener("click",()=>this.operation("stop"));
     this.$("#stop-observation")?.addEventListener("click",()=>this.operation("stop"));
     const ready=ops?.readiness;
@@ -383,7 +388,7 @@ class ThermalPlannerPanel extends HTMLElement {
   setMeasurementGoal(goal) { this.measurementGoal=goal;this.renderMeasurementEntry();this.labSignature=null;this.renderLab(); }
 
   openMeasurementSetup() {
-    this.setupOpen=true;
+    this.setupOpen=true;this.$("#measurement-context").hidden=true;this.message();
     const source=this.operations.source, root=this.$("#measurement-setup");root.hidden=false;
     const picker=(key,label,domain,selected,temperature=false)=>`<label for="setup-${key}">${label}</label><select id="setup-${key}"><option value="">${key === "climate" ? "No heat pump control — observation only" : "Not connected (optional)"}</option>${Object.entries(this._hass.states||{}).filter(([id,state])=>domain.includes(id.split(".")[0]) && (!temperature || ["°C","°F","K"].includes(state.attributes.unit_of_measurement))).map(([id,state])=>`<option value="${escapeHTML(id)}" ${id===selected?'selected':''}>${escapeHTML(state.attributes.friendly_name||id)} · ${escapeHTML(state.state)} ${escapeHTML(state.attributes.unit_of_measurement||"")} · ${escapeHTML(id)}</option>`).join("")}</select>`;
     root.innerHTML=`<h2>Connect your heating readings</h2><p>Choose the entities already in Home Assistant. Saving these choices sends no heating commands. Room sensors remain the air-temperature sensors you already added.</p>
@@ -400,7 +405,7 @@ class ThermalPlannerPanel extends HTMLElement {
       <label for="setup-age">How long may live readings go without being reported? (minutes)</label><input id="setup-age" type="number" min="1" max="1440" value="${this.entry?.max_age_minutes||30}" required><p><small>Live checks use HA's latest report time, even if the number did not change. Historical carry-forward is configured separately on Reports.</small></p>
       <label><input id="setup-supervised" type="checkbox" ${source.commissioning_allowed?'checked':''}> I want to enable the supervised pause/restore check. Someone will be present when I start it.</label>
       <p>This checkbox does not start the check or enable automatic heating.</p><button class="primary" type="submit">Save selected readings</button> <button id="cancel-setup" type="button">Cancel</button><p id="setup-error" role="alert" hidden></p></form>`;
-    this.$("#cancel-setup").onclick=()=>{this.setupOpen=false;root.hidden=true;};
+    this.$("#cancel-setup").onclick=()=>{this.setupOpen=false;root.hidden=true;this.$("#measurement-context").hidden=false;};
     this.$("#heishamon-file").onchange=async event=>{
       try {
         const file=event.target.files[0];if(!file)return;if(file.size>1024*1024)throw new Error("Choose a JSON file smaller than 1 MB.");
@@ -413,7 +418,7 @@ class ThermalPlannerPanel extends HTMLElement {
       values.dhw_states=this.$("#setup-dhw_states").value.split(",").map(s=>s.trim()).filter(Boolean);
       values.commissioning_allowed=this.$("#setup-supervised").checked;values.max_age_minutes=Number(this.$("#setup-age").value);
       const button=this.$("#measurement-setup-form button[type=submit]");button.disabled=true;
-      try {this.operations=await this.call("operations",{entry_id:this.entryId,action:"setup",setup:values});this.labState=this.operations.control;this.setupOpen=false;root.hidden=true;this.message("Readings saved. No heating commands were sent. Review the updated checks before starting.");this.labSignature=null;this.renderMeasurementEntry();this.renderSource();this.renderLab();}
+      try {this.operations=await this.call("operations",{entry_id:this.entryId,action:"setup",setup:values});this.labState=this.operations.control;this.setupOpen=false;root.hidden=true;this.$("#measurement-context").hidden=false;this.message("Readings saved. No heating commands were sent. Review the updated checks before starting.");this.labSignature=null;this.renderMeasurementEntry();this.renderSource();this.renderLab();}
       catch(error){const box=this.$("#setup-error");box.hidden=false;box.textContent=error.message||String(error);button.disabled=false;}
     };
     root.scrollIntoView({block:"start",behavior:"smooth"});
@@ -464,10 +469,10 @@ class ThermalPlannerPanel extends HTMLElement {
     const status = ({idle:"Ready",paused:"Climate paused",prepared:"Preparing operation",resuming:"Resuming heat",recovering:"Observing at trial flow",restoring:"Restoring original settings",restore_failed:"Restore needs attention",waiting_for_entity:"Waiting for source/readback"})[state.status] || state.status;
     const limit = source.pause_limit_minutes || 30;
     const busy = this.busy ? "disabled" : "";
-    const canStart = (ops.readiness?.can_pause ?? state.available) && !active && !recovery && !baseline && !this.busy;
+    const canStart = (ops.readiness?.can_pause ?? state.available) && !active && !recovery && !baseline && !campaign?.active && ops.mode === "advisory" && !this.busy;
     root.innerHTML = `<div class="row"><h2>Controlled measurements</h2><span class="badge">${state.simulated ? "Development simulator" : state.available ? "Commissioned source" : "Observation only"}</span></div>
       <p>Run a bounded cooldown, restore the original settings, then observe recovery. Minimum-temperature and missing-data guards stay active for every room.</p>
-      <p><strong>${escapeHTML(status)}</strong>${active ? ` · Restore deadline ${escapeHTML(this.time(active.recovery_deadline || active.deadline))}` : ""}${recovery ? ` · Recording recovery until ${escapeHTML(this.time(recovery.deadline))}` : ""}${baseline ? ` · Normal operation observation until ${escapeHTML(this.time(baseline.deadline))}` : ""}</p>
+      <p><strong>${escapeHTML(!active && status === "Ready" && ops.readiness?.can_pause === false ? "Not ready to pause — review the checks above" : status)}</strong>${active ? ` · Restore deadline ${escapeHTML(this.time(active.recovery_deadline || active.deadline))}` : ""}${recovery ? ` · Recording recovery until ${escapeHTML(this.time(recovery.deadline))}` : ""}${baseline ? ` · Normal operation observation until ${escapeHTML(this.time(baseline.deadline))}` : ""}</p>
       ${active?.error ? `<p class="warning">${escapeHTML(active.error)}. Three restore attempts are allowed per retry sequence. Use Stop / retry restore after checking availability.</p>` : ""}
       ${!state.configured ? '<p>Choose the heat pump in Configure before starting measurements.</p>' : ""}
       ${state.configured && !state.available ? `<p>Pause/restore capability has not been commissioned for this source. Configuration alone does not enable control.</p>

@@ -435,3 +435,17 @@ async def test_setup_requires_admin(operations):
             connection,
             {"id": 1, "entry_id": manager.entry.entry_id, "action": "setup", "setup": {}},
         )
+
+
+@pytest.mark.parametrize("scheduled", ["auto", "campaign"])
+async def test_manual_cooldown_cannot_compete_with_schedule(operations, scheduled):
+    hass, _, controller, engine, _ = operations
+    if scheduled == "auto":
+        engine.mode = "auto"
+    else:
+        engine.campaign = {"active": True}
+    with patch.object(type(hass.services), "async_call") as commands:
+        with pytest.raises(ServiceValidationError, match="Stop scheduled heating"):
+            await engine.run_once(5)
+        commands.assert_not_called()
+    assert controller.journal is None

@@ -21,6 +21,25 @@ replay:
       example: '2026-01-01T04:00:00+01:00'
       selector:
         text: null
+    assumed_outdoor_c:
+      name: Assumed constant outdoor temperature (optional)
+      description: Applies only to this historical report. Normalized results and CSV identify the assumption.
+      selector:
+        number:
+          min: -80
+          max: 60
+          step: 0.1
+          mode: box
+          unit_of_measurement: °C
+    history_policy:
+      name: Historical freshness policy (optional)
+      selector:
+        select:
+          options:
+            - value: until_changed
+              label: Keep last known reading until a change or recorded unavailability
+            - value: max_age
+              label: Stop using readings older than the configured freshness limit
 export_csv:
   name: Export CSV
   description: Return CSV text and an authenticated download path for a retained report.

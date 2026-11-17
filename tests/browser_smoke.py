@@ -278,6 +278,7 @@ def main():
             expect(page.locator("#heishamon-preview")).to_contain_text("sentinel values")
             page.locator('[data-suggestion="outdoor"]').click()
             expect(page.locator("#setup-outdoor")).to_have_value("sensor.outside_temp")
+            page.screenshot(path=str(output / "measurement-setup-desktop.png"), full_page=True)
             page.get_by_role("button", name="Save selected readings", exact=True).click()
             expect(page.locator("#measurement-setup")).to_be_hidden()
             assert page.evaluate(

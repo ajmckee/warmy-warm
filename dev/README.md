@@ -105,7 +105,7 @@ guard breach, weighted floors, and a real HA climate-service round trip. Existin
 tests also exercise actual SQLite Recorder history and replay persistence. The
 simulator tests disable timers and use temporary config directories.
 
-Verification completed against HA 2026.3.0: 109 pytest tests pass, Ruff lint and
+Verification completed against HA 2026.3.0: 118 pytest tests pass, Ruff lint and
 format checks pass, Compose and HA configuration validation pass, the Container
 serves HTTP 200 before and after restart, and Recorder contains the climate and
 all four fake temperature entities. Docker mount inspection confirms both source

@@ -59,7 +59,7 @@ The owner or a major contributor can submit a pull request to [hacs/default](htt
 
 ## Local preparation results
 
-- 109 tests pass on HA 2026.3.0 and independently on HA 2026.11.0.
+- 118 tests pass on HA 2026.3.0 and independently on HA 2026.11.0.
 - Official hassfest container validation passes with zero invalid integrations and no warnings.
 - Desktop/mobile browser smoke checks and Ruff lint/format checks pass.
 - Publication metadata is configured for `ajmckee/warmy-warm`, `@ajmckee` and MIT; local release validation passes for tag `0.3.2`.

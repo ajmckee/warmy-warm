@@ -202,6 +202,12 @@ class OperationsEngine:
         }
 
     async def run_once(self, minutes=None, trial_flow=None, *, purpose="manual"):
+        if purpose == "manual" and (
+            self.mode != "advisory" or (self.campaign and self.campaign.get("active"))
+        ):
+            raise ServiceValidationError(
+                "Stop scheduled heating before starting a manual cooldown."
+            )
         if self.observation or self.baseline:
             raise ServiceValidationError(
                 "Recovery observation is still active. Stop it before another run."
