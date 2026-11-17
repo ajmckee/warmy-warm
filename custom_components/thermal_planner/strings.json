@@ -7,11 +7,12 @@
       },
       "settings": {
         "title": "Historical temperature inputs",
-        "description": "Temperature reports are read-only. Open Thermal Planner in the sidebar to run and review reports. Outdoor and recorded weather temperature are optional. To add a weather provider, use Settings → Devices & services → Add integration, then return here. No forecast or energy sensor is required. Freshness bounds how long a recorded state can be held; unchanged states older than this limit are conservatively unavailable.",
+        "description": "Choose outdoor readings if you have them. Historical reports can keep a reading until it changes or becomes unavailable; this works with sensors that only record changes. Live controlled measurements always require recently reported readings. You can also enter an assumed outdoor temperature for an individual report.",
         "data": {
           "outdoor": "Measured outdoor temperature (optional)",
           "weather": "Existing weather entity (optional)",
-          "max_age_minutes": "Maximum reading age (minutes)"
+          "max_age_minutes": "Live freshness limit / age-limited history (minutes)",
+          "history_policy": "Historical readings"
         }
       },
       "room": {
@@ -121,7 +122,8 @@
               "recovery_minutes": "Maximum recovery observation / flow hold (minutes)",
               "recovery_tolerance_c": "Return-to-start temperature tolerance (°C)",
               "commissioning_allowed": "Allow a supervised commissioning run on this source",
-              "climate_target_is_flow": "Climate target mirrors this water-flow target"
+              "climate_target_is_flow": "Climate target mirrors this water-flow target",
+              "defrost_indicator": "Defrost active sensor (optional)"
             },
             "data_description": {
               "commissioning_allowed": "Only enable this when you can observe the installation and have checked the configured Heat/Off actions and restore behavior. Start commissioning separately on the Thermal Planner page; this checkbox itself issues no commands. Automatic planning is a separate later opt-in.",
@@ -247,11 +249,12 @@
     "step": {
       "settings": {
         "title": "Historical temperature inputs",
-        "description": "Temperature reports are read-only. Open Thermal Planner in the sidebar to run and review reports. Outdoor and recorded weather temperature are optional. To add a weather provider, use Settings → Devices & services → Add integration, then return here. No forecast or energy sensor is required. Freshness bounds how long a recorded state can be held; unchanged states older than this limit are conservatively unavailable.",
+        "description": "Choose outdoor readings if you have them. Historical reports can keep a reading until it changes or becomes unavailable; this works with sensors that only record changes. Live controlled measurements always require recently reported readings. You can also enter an assumed outdoor temperature for an individual report.",
         "data": {
           "outdoor": "Measured outdoor temperature (optional)",
           "weather": "Existing weather entity (optional)",
-          "max_age_minutes": "Maximum reading age (minutes)"
+          "max_age_minutes": "Live freshness limit / age-limited history (minutes)",
+          "history_policy": "Historical readings"
         }
       },
       "room": {
@@ -387,7 +390,8 @@
               "recovery_minutes": "Maximum recovery observation / flow hold (minutes)",
               "recovery_tolerance_c": "Return-to-start temperature tolerance (°C)",
               "commissioning_allowed": "Allow a supervised commissioning run on this source",
-              "climate_target_is_flow": "Climate target mirrors this water-flow target"
+              "climate_target_is_flow": "Climate target mirrors this water-flow target",
+              "defrost_indicator": "Defrost active sensor (optional)"
             },
             "data_description": {
               "commissioning_allowed": "Only enable this when you can observe the installation and have checked the configured Heat/Off actions and restore behavior. Start commissioning separately on the Thermal Planner page; this checkbox itself issues no commands. Automatic planning is a separate later opt-in.",

@@ -6,7 +6,7 @@ This guide follows the [official custom integration guide](https://contributors.
 
 ## Repository setup
 
-Publication identity is configured for [ajmckee/warmy-warm](https://github.com/ajmckee/warmy-warm), maintained by **@ajmckee**, under the **MIT license**. The manifest, package metadata, README install badge and license now use these confirmed details. The local repository has no GitHub remote configured.
+Publication identity is configured for [ajmckee/warmy-warm](https://github.com/ajmckee/warmy-warm), maintained by **@ajmckee**, under the **MIT license**. The manifest, package metadata, README install badge and license now use these confirmed details. The local `origin` remote is configured for this repository.
 
 Before pushing:
 
@@ -21,7 +21,7 @@ The only folder immediately below `custom_components` is `thermal_planner`. The 
 ## Validate before release
 
 ```sh
-.venv/bin/python dev/check_release.py --tag 0.3.1 --repository ajmckee/warmy-warm
+.venv/bin/python dev/check_release.py --tag 0.3.2 --repository ajmckee/warmy-warm
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check custom_components dev tests
 .venv/bin/ruff format --check custom_components dev tests
@@ -41,9 +41,9 @@ Before calling the release installation-ready, install the integration from the 
 
 ## Prepare the release
 
-Use version **0.3.1** consistently in `manifest.json`, `pyproject.toml` and the release tag. For future frontend changes, update the module URL in `panel.py` so existing browsers fetch the new script. Read and edit `CHANGELOG.md` before using it as release notes.
+Use version **0.3.2** consistently in `manifest.json`, `pyproject.toml` and the release tag. For future frontend changes, update the module URL in `panel.py` so existing browsers fetch the new script. Read and edit `CHANGELOG.md` before using it as release notes.
 
-Once checks pass, commit the reviewed files, push them to the selected public repository and create a **full GitHub release** tagged `0.3.1`. A tag by itself is insufficient. Use the corresponding changelog text as the release body. GitHub publication and catalog submission are separate from this local preparation; neither has been performed here.
+Once checks pass, commit the reviewed files, push them to the selected public repository and create a **full GitHub release** tagged `0.3.2`. A tag by itself is insufficient. Use the corresponding changelog text as the release body. GitHub publication and catalog submission are separate from this local preparation; neither has been performed here.
 
 For an initial trial, mark the release as a prerelease and tell testers to enable prereleases. A catalog submission requires a regular published release and passing validation links. Do not advertise live-hardware verification until the relevant on-site checks have actually passed.
 
@@ -62,7 +62,7 @@ The owner or a major contributor can submit a pull request to [hacs/default](htt
 - 109 tests pass on HA 2026.3.0 and independently on HA 2026.11.0.
 - Official hassfest container validation passes with zero invalid integrations and no warnings.
 - Desktop/mobile browser smoke checks and Ruff lint/format checks pass.
-- Publication metadata is configured for `ajmckee/warmy-warm`, `@ajmckee` and MIT; local release validation passes for tag `0.3.1`.
-- HACS remote validation, public GitHub release and catalog submission have not run: no GitHub remote is configured.
+- Publication metadata is configured for `ajmckee/warmy-warm`, `@ajmckee` and MIT; local release validation passes for tag `0.3.2`.
+- HACS remote validation, public GitHub release and catalog submission have not been performed by this preparation.
 
 These results cover repository preparation and simulator behavior. Clean Marketplace installation, HAOS acceptance and real source commissioning remain separate acceptance checks.

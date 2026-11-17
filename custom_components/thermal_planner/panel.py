@@ -54,6 +54,9 @@ async def ws_reports(hass, connection, msg):
             "status": manager.status,
             "room_count": len(manager.config["rooms"]),
             "heat_source": source_config(manager.config),
+            "outdoor": manager.config.get("outdoor"),
+            "max_age_minutes": manager.config["max_age_minutes"],
+            "history_policy": manager.config.get("history_policy", "until_changed"),
             "reports": [
                 summary(report)
                 for report in reversed(manager.reports)
@@ -90,6 +93,8 @@ async def ws_report(hass, connection, msg):
         vol.Required("entry_id"): str,
         vol.Required("start"): str,
         vol.Required("end"): str,
+        vol.Optional("assumed_outdoor_c"): vol.Coerce(float),
+        vol.Optional("history_policy"): vol.In(["max_age", "until_changed"]),
     }
 )
 @websocket_api.async_response
@@ -99,6 +104,8 @@ async def ws_analyse(hass, connection, msg):
         report = await manager.async_replay(
             local_timestamp(msg["start"], hass.config.time_zone),
             local_timestamp(msg["end"], hass.config.time_zone),
+            assumed_outdoor_c=msg.get("assumed_outdoor_c"),
+            history_policy=msg.get("history_policy"),
         )
     except ValueError as err:
         raise ServiceValidationError(str(err)) from err
@@ -173,6 +180,7 @@ async def ws_lab(hass, connection, msg):
                 "seed_demo",
                 "run_detail",
                 "observe",
+                "setup",
             ]
         ),
         vol.Optional("minutes"): vol.All(int, vol.Range(min=1, max=720)),
@@ -180,6 +188,7 @@ async def ws_lab(hass, connection, msg):
         vol.Optional("plan_id"): str,
         vol.Optional("run_id"): str,
         vol.Optional("acknowledged", default=False): bool,
+        vol.Optional("setup"): dict,
     }
 )
 @websocket_api.async_response
@@ -197,7 +206,9 @@ async def ws_operations(hass, connection, msg):
         return
     if action != "status" and not connection.user.is_admin:
         raise Unauthorized
-    if action in ("run", "trial"):
+    if action == "setup":
+        await save_measurement_setup(hass, manager, msg.get("setup", {}))
+    elif action in ("run", "trial"):
         if action == "trial" and "flow_target" not in msg:
             raise ServiceValidationError("Choose the explicitly approved direct flow target.")
         await engine.run_once(
@@ -267,7 +278,86 @@ async def async_setup_panel(hass):
         webcomponent_name="thermal-planner-panel",
         sidebar_title="Thermal Planner",
         sidebar_icon="mdi:home-thermometer-outline",
-        module_url="/thermal_planner_frontend/panel.js?v=0.3.1",
+        module_url="/thermal_planner_frontend/panel.js?v=0.3.2",
     )
     for command in (ws_reports, ws_report, ws_analyse, ws_export, ws_lab, ws_operations):
         websocket_api.async_register_command(hass, command)
+
+
+async def save_measurement_setup(hass, manager, values):
+    """Save only explicitly reviewed setup selections; never send heat commands."""
+    from .analysis import validate_config
+    from .source import HeatSource
+
+    engine = manager.engine
+    if (
+        engine.baseline
+        or engine.observation
+        or engine.mode != "advisory"
+        or (engine.campaign and engine.campaign.get("active"))
+        or (engine.controller and engine.controller.journal)
+    ):
+        raise ServiceValidationError(
+            "Stop the current measurement or schedule before changing setup."
+        )
+    allowed = {
+        "climate",
+        "outdoor",
+        "operating_mode",
+        "dhw_states",
+        "defrost_indicator",
+        "leaving_water",
+        "flow_readback",
+        "commissioning_allowed",
+        "max_age_minutes",
+    }
+    if set(values) - allowed:
+        raise ServiceValidationError("Unsupported setup setting.")
+    config = deepcopy(dict(manager.config))
+    source = source_config(config)
+    for key, value in values.items():
+        if key in ("outdoor", "max_age_minutes"):
+            config[key] = value
+        else:
+            source[key] = value
+    if not isinstance(source.get("commissioning_allowed"), bool):
+        raise ServiceValidationError("Confirm supervised commissioning using the checkbox.")
+    if not isinstance(source.get("dhw_states", []), list) or any(
+        not isinstance(v, str) for v in source.get("dhw_states", [])
+    ):
+        raise ServiceValidationError("Choose the hot-water state labels.")
+    config["heat_source"] = source
+    for key in (
+        "climate",
+        "operating_mode",
+        "defrost_indicator",
+        "leaving_water",
+        "flow_readback",
+        "outdoor",
+    ):
+        entity = config.get(key) if key == "outdoor" else source.get(key)
+        if not entity:
+            continue
+        if (
+            not isinstance(entity, str)
+            or entity.split(".")[0]
+            not in (
+                ("climate",)
+                if key == "climate"
+                else ("sensor", "binary_sensor", "select", "number", "input_number")
+            )
+            or hass.states.get(entity) is None
+        ):
+            raise ServiceValidationError(
+                f"Choose an existing Home Assistant entity for {key.replace('_', ' ')}."
+            )
+        if key in ("outdoor", "leaving_water", "flow_readback") and hass.states.get(
+            entity
+        ).attributes.get("unit_of_measurement") not in ("°C", "°F", "K"):
+            raise ServiceValidationError("Choose a temperature entity, not a water-flow rate.")
+    try:
+        validate_config(config)
+        HeatSource(hass, config, engine.now).validate_capabilities()
+    except (ValueError, TypeError) as err:
+        raise ServiceValidationError(str(err)) from err
+    hass.config_entries.async_update_entry(manager.entry, options=config)

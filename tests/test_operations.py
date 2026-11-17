@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import ServiceValidationError, Unauthorized
 from homeassistant.util import dt as dt_util
 
 from custom_components.thermal_planner.analysis.demo import demo_episodes
@@ -17,6 +17,8 @@ from custom_components.thermal_planner.const import DOMAIN
 from custom_components.thermal_planner.control import CONTROL_KEY, SourceController
 from custom_components.thermal_planner.integration import ReplayManager
 from custom_components.thermal_planner.operations import OperationsEngine
+from custom_components.thermal_planner.panel import save_measurement_setup, ws_operations
+from custom_components.thermal_planner.readiness import measurement_readiness
 
 CLIMATE = "climate.fake_house_heat_pump"
 FLOW = "number.fake_house_flow_target"
@@ -380,3 +382,56 @@ async def test_lost_forecast_restores_active_planner_pause(operations):
     assert controller.journal is None
     assert engine.mode == "advisory"
     assert "Forecast lost" in engine.events[-1]["message"]
+
+
+async def test_setup_saves_only_configuration_without_heat_commands(operations):
+    hass, manager, controller, engine, clock = operations
+    values = {
+        "climate": "climate.fake_house_heat_pump",
+        "outdoor": "sensor.fake_house_outdoor",
+        "max_age_minutes": 60,
+        "commissioning_allowed": False,
+    }
+    with (
+        patch.object(hass.config_entries, "async_update_entry") as update,
+        patch.object(type(hass.services), "async_call") as commands,
+    ):
+        await save_measurement_setup(hass, manager, values)
+        saved = update.call_args.kwargs["options"]
+        assert saved["heat_source"]["climate"] == values["climate"]
+        assert saved["max_age_minutes"] == 60
+        commands.assert_not_called()
+    engine.mode = "auto"
+    with pytest.raises(ServiceValidationError, match="Stop"):
+        await save_measurement_setup(hass, manager, values)
+
+
+async def test_readiness_explains_missing_control_and_dhw(operations):
+    hass, manager, controller, engine, clock = operations
+    manager.entry.data["heat_source"].pop("climate")
+    checks = measurement_readiness(hass, manager.config, controller, engine.now)
+    assert not checks["can_pause"] and checks["can_observe"]
+    assert any(c["action"] == "setup" for c in checks["checks"])
+    manager.entry.data["heat_source"]["operating_mode"] = "sensor.custom_mode"
+    hass.states.async_set("sensor.custom_mode", "DHW")
+    checks = measurement_readiness(hass, manager.config, controller, engine.now)
+    assert any("DHW" in c["message"] and not c["ready"] for c in checks["checks"])
+
+
+async def test_setup_requires_admin(operations):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    hass, manager, _, _, _ = operations
+    connection = SimpleNamespace(
+        user=SimpleNamespace(
+            is_admin=False, permissions=SimpleNamespace(check_entity=lambda *args: True)
+        ),
+        send_result=MagicMock(),
+    )
+    with pytest.raises(Unauthorized):
+        await ws_operations.__wrapped__(
+            hass,
+            connection,
+            {"id": 1, "entry_id": manager.entry.entry_id, "action": "setup", "setup": {}},
+        )

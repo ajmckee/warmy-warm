@@ -111,7 +111,9 @@ For example, choose **01:00 to 05:00 last night** to see which rooms cooled fast
 
 A cooling rate of **−0.5°C per hour** means the room cooled by about half a degree per hour during that period. It does not prove the heating was off. Reports based only on temperatures describe what happened; they do not calculate how much energy each room used.
 
-Check **data coverage** before comparing results. Gaps mean a reading was missing or too old to use. A blank result means there was not enough reliable data to calculate it. If readings are being marked old unexpectedly, review the freshness setting alongside how often your sensors report.
+Check **data coverage** before comparing results. Under **History and outdoor temperature**, choose how to handle unchanged readings. **Keep the last known reading** starts with the state already in effect before your chosen period, then carries it forward until it changes. Recorded unknown/unavailable states always create gaps, including short outages between graph samples. This cannot detect an outage that HA never recorded. **Age-limited history** instead stops using readings after the freshness limit; an older Recorder seed with unknown age is not treated as fresh.
+
+For a rough historical comparison when outside readings are missing, choose **Use a constant temperature I supply**. For example, enter **5°C** if you want to compare last night's indoor cooling on that assumption. The report and CSV clearly say that outside-normalized results use an assumed constant temperature. This is for that report only; it never becomes a live outdoor sensor or training measurement.
 
 Outdoor readings help compare cooling in different weather. Without usable outdoor history, you still get indoor temperature results. A weather forecast cannot fill missing historical readings.
 
@@ -123,7 +125,11 @@ There are two ways to collect measurements.
 
 ### Observe normal operation
 
-Choose **Observe normal operation** on the **Measurements** tab and enter a duration, such as **120 minutes**.
+Open **Measurements → Watch normal heating** (the default), enter a duration such as **120 minutes**, and select **Observe normal operation**. This first step does not require a heat pump control or commissioning.
+
+For a controlled test, choose **Controlled cooldown**. The page checks each room's current temperature, the heating control, hot-water/defrost conditions, and the pause/restore verification. Each blocked item explains what to do next. **Set up measurement** lets you choose the relevant HA readings directly on the page, without hunting through device options. Saving selections does not change the heating.
+
+Live sensor freshness uses the time HA last received a report, even if the value did not change. Live control stays age-limited independently of the historical keep-last-known option. A sensor that stops reporting still blocks a controlled test.
 
 This records what happens while your heating works as usual. It sends no heating commands and does not require commissioning. Stop any active scheduled control before starting it.
 
@@ -131,7 +137,7 @@ This records what happens while your heating works as usual. It sends no heating
 
 A controlled cooldown briefly pauses the selected heat pump, restores its previous settings, then watches the rooms warm up again. It requires source commissioning first.
 
-1. Check your room minimums and the source’s pause limits in configuration.
+1. Choose **Controlled cooldown** and review the readiness checklist. If needed, use **Set up measurement** to select your shared heating control and optional readings.
 2. On **Measurements**, choose the pause duration and select **Run once**.
 3. Follow the status while it runs. Select **Stop / retry restore** to end it early.
 4. When it finishes, select **View timeline** to review the cooldown and recovery.
@@ -228,3 +234,9 @@ Maintainers: see [Publishing](docs/PUBLISHING.md) for release checks and catalog
 ## License and support
 
 Thermal Planner is maintained by [@ajmckee](https://github.com/ajmckee) and released under the [MIT license](LICENSE). Report problems in [GitHub Issues](https://github.com/ajmckee/warmy-warm/issues). Remove passwords, tokens and personal details before sharing logs.
+
+## If your system uses HeishaMon
+
+In **Measurements → Set up measurement**, open **Help me match HeishaMon readings**. The field guide explains common names even without a snapshot. Optionally save your HeishaMon JSON status page as a file and open it there. The page shows the snapshot's zone/mode information and offers HA entity suggestions based on names. Review each suggestion and save only the selections you recognise; importing a file sends no commands and does not create telemetry or zones.
+
+**Main_Outlet_Temp** means actual water leaving the pump. **Main_Target_Temp** is requested water temperature. **Pump_Flow** is water volume per minute, not temperature. **Heatpump_State = On** does not prove rooms are receiving heat: the system could be heating domestic hot water. Z1/Z2 fields can exist for unused zones, and a zone temperature may be water rather than room air. Use your room-air sensors for the rooms. [HeishaMon field guide](docs/HEISHAMON.md).

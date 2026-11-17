@@ -47,6 +47,8 @@ def signature(config):
 
 
 def validate_settings(config):
+    if config.get("history_policy", "max_age") not in ("max_age", "until_changed"):
+        raise ValueError("Choose a valid historical freshness policy")
     source = source_config(config)
     if not source["name"].strip():
         raise ValueError("Heat-source name is required")
@@ -122,6 +124,7 @@ def all_entities(config):
         entities.update(room["sensors"])
         entities.update(room.get("diagnostics", []))
         entities.add(room.get("humidity"))
+        entities.add(room.get("radiant_temperature"))
     source = source_config(config)
     entities.update(
         source.get(key)
@@ -129,6 +132,7 @@ def all_entities(config):
             "climate",
             "space_heating",
             "operating_mode",
+            "defrost_indicator",
             "leaving_water",
             "flow_readback",
             "flow_setter",

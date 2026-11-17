@@ -10,13 +10,15 @@ from .configuration import all_entities
 
 def _read_history(hass, config, start, end):
     entities = all_entities(config)
-    # Fetch an actual lookback, not a synthetic start-state timestamp. This preserves age.
+    # Recorder seeds older values at query_start, without their original timestamp.
+    # Mark those seeds explicitly: carry mode can use them; bounded mode cannot prove age.
+    query_start = start - timedelta(minutes=config["max_age_minutes"], microseconds=1)
     history = get_significant_states(
         hass,
-        start - timedelta(minutes=config["max_age_minutes"]),
+        query_start,
         end + timedelta(microseconds=1),
         entity_ids=sorted(entities),
-        include_start_time_state=False,
+        include_start_time_state=True,
         significant_changes_only=False,
         minimal_response=False,
         no_attributes=False,
@@ -25,6 +27,7 @@ def _read_history(hass, config, start, end):
         entity: [
             dict(
                 timestamp=state.last_updated.isoformat(),
+                original_timestamp_unknown=state.last_updated == query_start,
                 value=state.attributes.get("temperature")
                 if entity.startswith("weather.")
                 else state.state,

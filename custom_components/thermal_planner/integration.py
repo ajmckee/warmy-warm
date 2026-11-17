@@ -52,7 +52,7 @@ class ReplayManager:
     def publish(self):
         async_dispatcher_send(self.hass, f"{DOMAIN}_{self.entry.entry_id}")
 
-    async def async_replay(self, start, end):
+    async def async_replay(self, start, end, *, assumed_outdoor_c=None, history_policy=None):
         if self.lock.locked():
             raise ServiceValidationError("A replay is already running")
         start, end = timestamp(start), timestamp(end)
@@ -60,6 +60,19 @@ class ReplayManager:
             raise ServiceValidationError("Select a past window between one minute and 24 hours")
         async with self.lock:
             config = deepcopy(dict(self.config))
+            if assumed_outdoor_c is not None:
+                from .analysis.signals import finite
+
+                assumed = finite(assumed_outdoor_c)
+                if assumed is None or not -80 <= assumed <= 60:
+                    raise ServiceValidationError(
+                        "Choose an assumed outdoor temperature between −80 and 60°C."
+                    )
+                config["assumed_outdoor_c"] = assumed
+            if history_policy is not None:
+                if history_policy not in ("max_age", "until_changed"):
+                    raise ServiceValidationError("Choose a valid history freshness policy.")
+                config["history_policy"] = history_policy
             self.status = "replaying"
             self.publish()
             try:
@@ -132,7 +145,12 @@ async def async_setup(hass, config):
     async def run(call):
         await check_reader(call, manager_for(call).config)
         try:
-            report = await manager_for(call).async_replay(call.data["start"], call.data["end"])
+            report = await manager_for(call).async_replay(
+                call.data["start"],
+                call.data["end"],
+                assumed_outdoor_c=call.data.get("assumed_outdoor_c"),
+                history_policy=call.data.get("history_policy"),
+            )
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
         return {"report": report}
@@ -159,7 +177,13 @@ async def async_setup(hass, config):
         "replay",
         run,
         schema=vol.Schema(
-            {vol.Required("entry_id"): str, vol.Required("start"): str, vol.Required("end"): str}
+            {
+                vol.Required("entry_id"): str,
+                vol.Required("start"): str,
+                vol.Required("end"): str,
+                vol.Optional("assumed_outdoor_c"): vol.Coerce(float),
+                vol.Optional("history_policy"): vol.In(["until_changed", "max_age"]),
+            }
         ),
         supports_response=SupportsResponse.ONLY,
     )

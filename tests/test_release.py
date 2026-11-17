@@ -38,14 +38,14 @@ def publication(tmp_path):
 
 
 def test_complete_release_metadata(publication):
-    assert check(publication, tag="0.3.1", repository="example/thermal-planner") == []
+    assert check(publication, tag="0.3.2", repository="example/thermal-planner") == []
 
 
 @pytest.mark.parametrize(
     "tag,repository,expected",
     [
-        ("0.3.0", "example/thermal-planner", "versions must match"),
-        ("0.3.1", "different/repository", "does not match"),
+        ("0.3.1", "example/thermal-planner", "versions must match"),
+        ("0.3.2", "different/repository", "does not match"),
     ],
 )
 def test_reject_wrong_release_identity(publication, tag, repository, expected):

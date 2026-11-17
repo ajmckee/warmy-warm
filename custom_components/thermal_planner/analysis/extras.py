@@ -17,7 +17,15 @@ def enrich(report, history, times, traces, config, age):
     def reading(entity, when):
         stamps, records = indexed.get(entity, ([], {}))
         index = bisect_right(stamps, when) - 1
-        return records[stamps[index]] if index >= 0 and when - stamps[index] <= age else None
+        if index < 0 or when - stamps[index] > age:
+            return None
+        record = records[stamps[index]]
+        if (
+            record.get("original_timestamp_unknown")
+            and config.get("history_policy") != "until_changed"
+        ):
+            return None
+        return record
 
     humidities = {}
     for room in config["rooms"]:
@@ -60,6 +68,9 @@ def enrich(report, history, times, traces, config, age):
             mode["value"] if mode else None,
             source,
         )
+        defrost = reading(source.get("defrost_indicator"), when)
+        if defrost and str(defrost["value"]).casefold() in ("on", "active", "1", "true"):
+            category = "defrost"
         categories[category] += 1
         point = {"time": when}
         for name, definition in config.get("energy", {}).items():

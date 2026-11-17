@@ -37,7 +37,7 @@ def validate_config(config):
         raise ValueError("Freshness must be between 1 minute and 24 hours")
 
 
-def normalize(history):
+def normalize(history, allow_unknown_seed=False):
     result = {}
     for entity, records in history.items():
         points = {}
@@ -55,6 +55,8 @@ def normalize(history):
                 if value is not None and not math.isfinite(value):
                     value = None
             except ValueError, TypeError:
+                value = None
+            if record.get("original_timestamp_unknown") and not allow_unknown_seed:
                 value = None
             points[when] = value
         result[entity] = (sorted(points), points)
@@ -155,8 +157,9 @@ def replay(config, history, start, end):
     seconds = (end - start).total_seconds()
     if not 60 <= seconds <= 86400:
         raise ValueError("Replay must be between one minute and 24 hours")
-    series = normalize(history)
-    age = config["max_age_minutes"] * 60
+    carry = config.get("history_policy") == "until_changed"
+    series = normalize(history, allow_unknown_seed=carry)
+    age = float("inf") if carry else config["max_age_minutes"] * 60
     # Fixed five-minute cadence, including exact window boundaries and final endpoint.
     offsets = sorted(
         set(
@@ -165,19 +168,76 @@ def replay(config, history, start, end):
             + [x for x in (3600, 7200, 14400) if x < seconds]
         )
     )
+    # Preserve actual outage/recovery boundaries, even between five-minute samples.
+    temperature_entities = {config.get("outdoor"), config.get("weather")}
+    for room in config["rooms"]:
+        temperature_entities.update(room["sensors"])
+        temperature_entities.update(room.get("diagnostics", []))
+    boundaries = set(offsets)
+    for entity in temperature_entities:
+        stamps, values = series.get(entity, ([], {}))
+        for i, when in enumerate(stamps):
+            if values[when] is None:
+                for transition in stamps[i : i + 2]:
+                    offset = transition - start.timestamp()
+                    if 0 <= offset <= seconds:
+                        boundaries.add(offset)
+    offsets = sorted(boundaries)
     times = [start.timestamp() + x for x in offsets]
     outdoor = config.get("outdoor") or config.get("weather")
     outside = [reading(series, outdoor, t, age) for t in times]
     if not any(value is not None for value in outside) and config.get("weather"):
         outdoor = config["weather"]
         outside = [reading(series, outdoor, t, age) for t in times]
+    assumed = config.get("assumed_outdoor_c")
+    if assumed is not None:
+        if (
+            not isinstance(assumed, (int, float))
+            or not math.isfinite(assumed)
+            or not -80 <= assumed <= 60
+        ):
+            raise ValueError("Enter an assumed outdoor temperature between −80 and 60°C")
+        outdoor = "assumed_constant"
+        outside = [float(assumed)] * len(times)
     traces = {r["name"]: [fuse(series, r, t, age) for t in times] for r in config["rooms"]}
+    outages = []
+    for entity, records in history.items():
+        previous = [record for record in records if timestamp(record["timestamp"]) < start]
+        initial = max(previous, key=lambda record: timestamp(record["timestamp"]), default=None)
+        if initial and str(initial.get("value", "")).casefold() in ("unknown", "unavailable"):
+            outages.append(
+                {
+                    "entity_id": entity,
+                    "timestamp": initial["timestamp"],
+                    "state": str(initial["value"]),
+                    "present_at_window_start": True,
+                    "original_timestamp_unknown": bool(initial.get("original_timestamp_unknown")),
+                }
+            )
+        outages.extend(
+            {"entity_id": entity, "timestamp": record["timestamp"], "state": str(record["value"])}
+            for record in records
+            if str(record.get("value", "")).casefold() in ("unknown", "unavailable")
+            and start <= timestamp(record["timestamp"]) <= end
+        )
     report = dict(
         version=1,
         start=start.isoformat(),
         end=end.isoformat(),
         label="observed indoor change; heat delivery unverified",
         outdoor_source=outdoor,
+        outdoor_assumption_c=assumed,
+        normalization_basis=(
+            f"Assumed constant outdoor temperature: {assumed:g}°C"
+            if assumed is not None
+            else "Recorded outdoor temperatures"
+        ),
+        unavailability_events=outages[:100],
+        data_policy={
+            "history_policy": "until_changed" if carry else "max_age",
+            "max_age_minutes": None if carry else config["max_age_minutes"],
+            "seed_timestamp_note": "Recorder boundary seeds have unknown original age; they are never treated as fresh in age-limited mode.",
+        },
         configuration=deepcopy(config),
         windows=[],
         rooms={},
@@ -263,6 +323,7 @@ def to_csv(report):
         "mean_gap_k",
         "normalized_c_per_h_10k",
         "quality",
+        "normalization_basis",
     ]
     writer = csv.DictWriter(output, fields, extrasaction="ignore")
     writer.writeheader()
@@ -272,6 +333,15 @@ def to_csv(report):
                 # Prevent spreadsheet formula interpretation of user-supplied labels.
                 safe_name = "'" + name if name.startswith(("=", "+", "-", "@")) else name
                 writer.writerow(
-                    dict(data, kind=kind, name=safe_name, start=window["start"], end=window["end"])
+                    dict(
+                        data,
+                        kind=kind,
+                        name=safe_name,
+                        start=window["start"],
+                        end=window["end"],
+                        normalization_basis=report.get(
+                            "normalization_basis", "Recorded outdoor temperatures"
+                        ),
+                    )
                 )
     return output.getvalue()

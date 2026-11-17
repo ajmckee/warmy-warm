@@ -237,9 +237,11 @@ async def test_recorder_adapter_uses_public_api_and_executor(hass, fixture):
         )
     assert history["sensor.a91"][0]["unit"] == "°F"
     assert history["weather.any"][0]["value"] == 10
-    assert query.call_args.kwargs["include_start_time_state"] is False
+    assert query.call_args.kwargs["include_start_time_state"] is True
     assert query.call_args.kwargs["significant_changes_only"] is False
-    assert query.call_args.args[1] == timestamp(fixture["start"]) - timedelta(minutes=15)
+    assert query.call_args.args[1] == timestamp(fixture["start"]) - timedelta(
+        minutes=15, microseconds=1
+    )
 
 
 async def test_replay_storage_actions_csv_and_no_control(hass, fixture):
@@ -349,7 +351,19 @@ async def test_real_sqlite_recorder_replay(hass, fixture):
                 session.commit()
 
         await instance.async_add_executor_job(set_start)
-        for entity, records in fixture["history"].items():
+        start = timestamp(fixture["start"])
+        fixture["history"]["sensor.steady"] = [
+            {"timestamp": (start - timedelta(minutes=45)).isoformat(), "value": 21, "unit": "°C"},
+            {
+                "timestamp": (start + timedelta(minutes=2)).isoformat(),
+                "value": "unavailable",
+                "unit": "°C",
+            },
+            {"timestamp": (start + timedelta(minutes=3)).isoformat(), "value": 21, "unit": "°C"},
+        ]
+        for entity, records in sorted(
+            fixture["history"].items(), key=lambda item: timestamp(item[1][0]["timestamp"])
+        ):
             for record in records:
                 state = State(
                     entity,
@@ -375,6 +389,20 @@ async def test_real_sqlite_recorder_replay(hass, fixture):
         assert report["windows"][0]["rooms"]["Study"]["slope_c_per_h"] == -1
         assert report["windows"][0]["floors"]["Ground"]["slope_c_per_h"] == -0.75
         assert report["limiting_room"] == "Bathroom"
+        seeded_config = deepcopy(fixture["config"])
+        seeded_config["history_policy"] = "until_changed"
+        seeded_config["rooms"] = [
+            dict(seeded_config["rooms"][0], sensors=["sensor.steady"], weights=[1])
+        ]
+        seeded = await async_history(hass, seeded_config, start, start + timedelta(hours=1))
+        seed_report = replay(seeded_config, seeded, start, start + timedelta(hours=1))
+        assert seed_report["traces"]["rooms"]["Study"][0] == 21, (
+            seeded,
+            instance.states_manager.oldest_ts,
+        )
+        assert seed_report["windows"][0]["rooms"]["Study"]["coverage"] < 1
+        assert seed_report["unavailability_events"][0]["state"] == "unavailable"
+
     finally:
         await hass.async_stop(force=True)
 

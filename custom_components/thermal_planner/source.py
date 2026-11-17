@@ -32,7 +32,7 @@ class HeatSource:
         state = self.hass.states.get(entity_id) if entity_id else None
         if state is None or state.state in ("unknown", "unavailable"):
             return None
-        age = (self.now() - state.last_updated).total_seconds()
+        age = (self.now() - getattr(state, "last_reported", state.last_updated)).total_seconds()
         if fresh and (age > self.config["max_age_minutes"] * 60 or age < -60):
             return None
         return state
@@ -68,10 +68,18 @@ class HeatSource:
             mode = self.state(settings["operating_mode"])
             if mode is None:
                 return "Selected operating-mode telemetry is missing or stale."
-            if mode.state in settings.get("dhw_states", []):
-                return "DHW is active; skip space-heating experiments."
-            if mode.state in settings.get("defrost_states", []):
+            if mode.state.casefold() in [str(s).casefold() for s in settings.get("dhw_states", [])]:
+                return "DHW (hot water) is active. Wait until normal room heating resumes."
+            if mode.state.casefold() in [
+                str(s).casefold() for s in settings.get("defrost_states", [])
+            ]:
                 return "Defrost is active; skip space-heating experiments."
+        if settings.get("defrost_indicator"):
+            defrost = self.state(settings["defrost_indicator"])
+            if defrost is None:
+                return "The defrost sensor is unavailable. Check it before a controlled test."
+            if defrost.state.casefold() in ("on", "active", "1", "true"):
+                return "The heat pump is defrosting. Wait until normal space heating resumes."
         if settings.get("space_heating") and self.state(settings["space_heating"]) is None:
             return "Selected heat-delivery indication is missing or stale."
         for entity in settings.get("disturbances", []):
@@ -92,7 +100,11 @@ class HeatSource:
             operating.state if operating else None,
             settings,
         )
-        contaminated = category in ("dhw", "defrost")
+        if settings.get("defrost_indicator"):
+            defrost = self.state(settings["defrost_indicator"])
+            if defrost and defrost.state.casefold() in ("on", "active", "1", "true"):
+                category = "defrost"
+        contaminated = category in ("dhw", "defrost") or bool(self.disturbance_reason())
         if (settings.get("space_heating") and heating is None) or (
             settings.get("operating_mode") and operating is None
         ):
@@ -172,7 +184,7 @@ class HeatSource:
             if state is not None:
                 weather = entity.startswith("weather.")
                 point["signals"][entity] = {
-                    "timestamp": state.last_updated.isoformat(),
+                    "timestamp": getattr(state, "last_reported", state.last_updated).isoformat(),
                     "value": state.attributes.get("temperature") if weather else state.state,
                     "unit": state.attributes.get("temperature_unit")
                     if weather

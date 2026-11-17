@@ -63,6 +63,19 @@ def main():
     )
     plan = make_plan(config, models, current, forecast, now, "Europe/Warsaw")
     ops = {
+        "readiness": {
+            "can_pause": True,
+            "can_observe": True,
+            "can_commission": True,
+            "checks": [
+                {"title": "Heat pump", "ready": True, "message": "Ready to pause and restore."},
+                {
+                    "title": "Pause and restore check",
+                    "ready": True,
+                    "message": "Verified for these source settings.",
+                },
+            ],
+        },
         "source": config["heat_source"],
         "rooms": config["rooms"],
         "mode": "advisory",
@@ -88,7 +101,11 @@ def main():
     import '/panel.js';
     window.mock = {report: REPORT, operations: OPS_DATA, run: RUN_DATA, calls: [], lab: {available:true,configured:true,simulated:true,status:'idle',journal:null,last_run:null}};
     const panel = document.createElement('thermal-planner-panel');
-    panel.hass = {config:{time_zone:'Europe/Warsaw'},user:{is_admin:true},callWS:async(msg)=>{
+    panel.hass = {config:{time_zone:'Europe/Warsaw'},user:{is_admin:true},states:{
+      'climate.fake_house_heat_pump':{state:'heat',attributes:{friendly_name:'Shared heat pump',hvac_modes:['heat','off'],temperature:23}},
+      'sensor.outside_temp':{state:'8',attributes:{friendly_name:'Outside Temp',unit_of_measurement:'°C'}},
+      'sensor.operating_mode_state':{state:'DHW',attributes:{friendly_name:'Operating Mode State'}},
+      'sensor.main_outlet_temp':{state:'37',attributes:{friendly_name:'Main Outlet Temp',unit_of_measurement:'°C'}}},callWS:async(msg)=>{
       window.mock.calls.push(msg);
       const report = window.mock.report;
       if(msg.type==='thermal_planner/reports') return {entries:[{entry_id:'lab-entry',title:'Thermal Planner',status:'complete',room_count:4,
@@ -97,11 +114,12 @@ def main():
       if(msg.type==='thermal_planner/analyse') {
         if(msg.start>=msg.end) throw new Error('Start must be before end.');
         await new Promise(resolve=>setTimeout(resolve,100));
-        report.id='new-report'; return structuredClone(report);
+        report.id='new-report'; report.outdoor_assumption_c=msg.assumed_outdoor_c ?? null; return structuredClone(report);
       }
       if(msg.type==='thermal_planner/export') return 'name,value\\nStudy,22\\n';
       if(msg.type==='thermal_planner/operations') {
         const ops=window.mock.operations;
+        if(msg.action==='setup') {Object.assign(ops.source,msg.setup);}
         if(msg.action==='run_detail') return structuredClone(window.mock.run);
         if(msg.action==='run' || msg.action==='trial') window.mock.lab={...window.mock.lab,status:'paused',last_run:null,journal:{
           deadline:new Date(Date.now()+msg.minutes*60000).toISOString(),reason:null,
@@ -170,11 +188,15 @@ def main():
             page.locator("#end").fill("2026-01-01T05:00")
             page.get_by_role("button", name="Analyse temperatures", exact=True).click()
             expect(page.get_by_role("alert")).to_contain_text("Start must be before end")
+            page.get_by_text("History and outdoor temperature", exact=True).click()
+            page.locator("#outdoor-mode").select_option("assumed")
+            page.locator("#assumed-outdoor").fill("5")
             page.locator("#start").fill("2026-01-01T01:00")
             page.get_by_role("button", name="Analyse temperatures", exact=True).click()
             expect(page.get_by_role("status")).to_contain_text("Report saved")
+            expect(page.locator("#report")).to_contain_text("Assumed outdoor temperature: 5.0°C")
             assert page.evaluate(
-                "window.mock.calls.some(m=>m.type==='thermal_planner/analyse' && m.start==='2026-01-01T01:00')"
+                "window.mock.calls.some(m=>m.type==='thermal_planner/analyse' && m.start==='2026-01-01T01:00' && m.assumed_outdoor_c===5 && m.history_policy==='until_changed')"
             )
             with page.expect_download() as download:
                 page.get_by_role("button", name="Export CSV", exact=True).click()
@@ -183,6 +205,7 @@ def main():
             expect(page.locator("#page-reports")).to_be_hidden()
             expect(page.get_by_role("tabpanel")).to_have_count(1)
             expect(page).to_have_url(f"http://127.0.0.1:{server.server_port}/#measurements")
+            page.get_by_role("button", name="Controlled cooldown", exact=True).click()
             page.locator("#minutes").fill("3")
             page.get_by_role("button", name="Run once", exact=True).click()
             expect(page.locator("#lab")).to_contain_text("Climate paused")
@@ -191,9 +214,14 @@ def main():
             expect(page.locator("#lab")).to_contain_text("Original Heat mode confirmed")
             expect(page.locator("#source")).to_contain_text("Shared zone")
             expect(page.locator("#source")).to_contain_text("Underfloor heating")
+            page.get_by_role("button", name="Watch normal heating", exact=True).click()
+            expect(page.locator("#lab")).to_be_hidden()
             page.get_by_role("button", name="Observe normal operation", exact=True).click()
-            expect(page.locator("#lab")).to_contain_text("Normal operation observation until")
-            page.get_by_role("button", name="Stop / retry restore", exact=True).click()
+            expect(page.locator("#observation-progress")).to_contain_text(
+                "Watching normal heating until"
+            )
+            page.get_by_role("button", name="Stop observation", exact=True).click()
+            page.get_by_role("button", name="Controlled cooldown", exact=True).click()
             page.get_by_role("button", name="Start campaign", exact=True).click()
             expect(page.locator("#lab")).to_contain_text("Campaign · active")
             page.get_by_role("button", name="Stop / retry restore", exact=True).click()
@@ -220,6 +248,41 @@ def main():
             page.get_by_role("button", name="View timeline", exact=True).first.click()
             expect(page.locator("#run-detail")).to_contain_text("Synthetic fixture")
             page.get_by_role("button", name="Close timeline", exact=True).click()
+            page.evaluate(
+                "window.mock.operations.readiness={can_pause:false,can_observe:true,can_commission:false,checks:[{title:'Heat pump',ready:false,message:'Choose the Home Assistant heating control.',action:'setup'}]};window.mock.operations.source.climate=null;window.mock.lab.available=false;window.mock.lab.configured=false"
+            )
+            page.evaluate("document.querySelector('thermal-planner-panel').refresh()")
+            expect(page.get_by_role("button", name="Run once", exact=True)).to_be_disabled()
+            expect(page.locator("#measurement-checks")).to_contain_text(
+                "Choose the Home Assistant heating control"
+            )
+            page.get_by_role("button", name="Choose heating control", exact=True).click()
+            page.locator("#setup-climate").select_option("climate.fake_house_heat_pump")
+            page.get_by_text("Help me match HeishaMon readings", exact=True).click()
+            snapshot = {
+                "heatpump": [
+                    {"Name": "Outside_Temp", "Value": 8, "Description": "°C"},
+                    {"Name": "Operating_Mode_State", "Value": 3, "Description": "DHW"},
+                    {"Name": "Zones_State", "Value": 0, "Description": "Zone 1 active"},
+                    {"Name": "Z2_Temp", "Value": -128, "Description": "°C"},
+                ]
+            }
+            page.locator("#heishamon-file").set_input_files(
+                {
+                    "name": "snapshot.json",
+                    "mimeType": "application/json",
+                    "buffer": json.dumps(snapshot).encode(),
+                }
+            )
+            expect(page.locator("#heishamon-preview")).to_contain_text("Zone 1 active")
+            expect(page.locator("#heishamon-preview")).to_contain_text("sentinel values")
+            page.locator('[data-suggestion="outdoor"]').click()
+            expect(page.locator("#setup-outdoor")).to_have_value("sensor.outside_temp")
+            page.get_by_role("button", name="Save selected readings", exact=True).click()
+            expect(page.locator("#measurement-setup")).to_be_hidden()
+            assert page.evaluate(
+                "window.mock.calls.some(m=>m.action==='setup' && m.setup.outdoor==='sensor.outside_temp')"
+            )
             page.set_viewport_size({"width": 390, "height": 844})
             page.evaluate(
                 "document.querySelector('thermal-planner-panel').narrow=true; window.addEventListener('hass-toggle-menu',()=>window.menuOpened=true)"

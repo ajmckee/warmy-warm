@@ -1,5 +1,14 @@
 # Release notes
 
+## 0.3.2 — history and measurement setup
+
+- Historical reports seed the state already in effect before the window, with keep-last-known or age-limited policy and explicit outage/recovery boundaries.
+- An optional constant outdoor temperature is scoped to one historical report and labelled in graphs and CSV normalization results.
+- Live guards use HA last-reported timestamps, so repeated identical readings do not become falsely stale.
+- Measurements starts with read-only normal observation, then guides controlled cooldowns through readiness checks and an in-page setup form.
+- Optional HeishaMon snapshot help explains fields and suggests existing HA entities for explicit review. It creates no direct device or MQTT connection.
+- Defrost indicators and case-insensitive DHW labels prevent contaminated cooldowns; control remains supervised and opt-in.
+
 ## 0.3.1 — prepared for first public release
 
 ### Before using heating controls

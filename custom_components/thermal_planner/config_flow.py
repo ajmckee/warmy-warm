@@ -66,6 +66,22 @@ class ConfigurationSteps:
             except ValueError:
                 errors["base"] = "invalid_units"
         schema = {
+            vol.Required(
+                "history_policy", default=self.settings.get("history_policy", "until_changed")
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {
+                            "value": "until_changed",
+                            "label": "Keep the last known reading until it changes or becomes unavailable",
+                        },
+                        {
+                            "value": "max_age",
+                            "label": "Stop using readings older than the freshness limit",
+                        },
+                    ]
+                )
+            ),
             vol.Optional(
                 "outdoor", description={"suggested_value": self.settings.get("outdoor")}
             ): entity(),
@@ -91,6 +107,7 @@ class ConfigurationSteps:
                 "climate",
                 "space_heating",
                 "operating_mode",
+                "defrost_indicator",
                 "leaving_water",
                 "flow_readback",
                 "flow_setter",
@@ -119,6 +136,7 @@ class ConfigurationSteps:
 
         advanced = {
             optional("space_heating"): entity("binary_sensor"),
+            optional("defrost_indicator"): entity(["binary_sensor", "sensor"]),
             optional("operating_mode"): entity(["sensor", "select"]),
             vol.Optional("dhw_states", default=",".join(old.get("dhw_states", []))): str,
             vol.Optional("defrost_states", default=",".join(old.get("defrost_states", []))): str,

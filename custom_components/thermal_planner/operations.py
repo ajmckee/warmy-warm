@@ -140,7 +140,10 @@ class OperationsEngine:
         )
 
     def snapshot(self):
+        from .readiness import measurement_readiness
+
         return {
+            "readiness": measurement_readiness(self.hass, self.config, self.controller, self.now),
             "source": source_config(self.config),
             "rooms": [
                 {
@@ -715,6 +718,15 @@ class OperationsEngine:
                 await self.planner_tick()
 
     async def observe_normal(self, minutes):
+        missing = [
+            name
+            for name, value in HeatSource(self.hass, self.config, self.now).room_values().items()
+            if value is None
+        ]
+        if missing:
+            raise ServiceValidationError(
+                "Check the room sensor or live freshness limit for: " + ", ".join(missing)
+            )
         if self.mode != "advisory" or (self.campaign and self.campaign["active"]):
             raise ServiceValidationError("Stop scheduled control before a read-only observation.")
         if self.observation or self.baseline or (self.controller and self.controller.journal):

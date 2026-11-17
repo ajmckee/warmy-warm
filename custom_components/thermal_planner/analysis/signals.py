@@ -39,9 +39,13 @@ def dew_point(temperature_c, humidity):
 
 def classify(mode, space_heat=None, operating_mode=None, mapping=None):
     mapping = mapping or {}
-    if operating_mode in mapping.get("dhw_states", []):
+    if operating_mode is not None and str(operating_mode).casefold() in [
+        str(s).casefold() for s in mapping.get("dhw_states", [])
+    ]:
         return "dhw"
-    if operating_mode in mapping.get("defrost_states", []):
+    if operating_mode is not None and str(operating_mode).casefold() in [
+        str(s).casefold() for s in mapping.get("defrost_states", [])
+    ]:
         return "defrost"
     if space_heat == "off":
         return "space_heat_stopped"

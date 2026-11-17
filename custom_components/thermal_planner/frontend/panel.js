@@ -57,7 +57,7 @@ class ThermalPlannerPanel extends HTMLElement {
     this.onPageChange();
     if (this._hass) this.refresh();
     this.timer = setInterval(() => {
-      if (!this.busy && !this.loading && this._hass) this.refresh(true);
+      if (!this.busy && !this.loading && !this.setupOpen && this._hass) this.refresh(true);
     }, 10000);
   }
   disconnectedCallback() { clearInterval(this.timer); window.removeEventListener("hashchange", this.onPageChange); }
@@ -148,14 +148,14 @@ class ThermalPlannerPanel extends HTMLElement {
           <form class="analyse" id="analyse-form"><div><label for="start">Period start</label><input id="start" type="datetime-local" required></div>
             <div><label for="end">Period end</label><input id="end" type="datetime-local" required></div>
             <button class="primary" id="analyse" type="submit">Analyse temperatures</button></form>
-          <p class="muted"><small id="time-help"></small></p></section>
+          <p class="muted"><small id="time-help"></small></p><details><summary>History and outdoor temperature</summary><label for="history-policy">Use recorded readings</label><select id="history-policy"><option value="until_changed">Keep the last known reading until it changes or becomes unavailable</option><option value="max_age">Stop using readings older than my configured freshness limit</option></select><p><small>Recorder often saves changes, not repeated identical readings. Keep-last-known avoids false gaps, but cannot prove the sensor stayed online. Recorded unknown/unavailable states always create gaps. Live safety checks stay age-limited.</small></p><label for="outdoor-mode">Outdoor temperature for this report</label><select id="outdoor-mode"><option value="recorded">Use recorded outdoor / weather readings</option><option value="assumed">Use a constant temperature I supply</option></select><div id="assumed-outdoor-field" hidden><label for="assumed-outdoor">Assumed outdoor temperature (°C)</label><input id="assumed-outdoor" type="number" min="-80" max="60" step="0.1"><p><small>This assumption is saved and labelled on the report and CSV. It does not change live measurements or train a model.</small></p></div></details></section>
         <section id="overview" class="summary" aria-label="Selected report overview"></section>
         <div class="layout"><aside class="card"><h2>Saved reports</h2><small>Latest 10 reports · saved automatically</small><div id="saved-list"></div></aside>
           <section id="report" aria-label="Report details"></section></div>
         </section>
         <section id="page-measurements" role="tabpanel" aria-labelledby="tab-measurements" tabindex="0" hidden>
           <div class="page-intro"><h2>Measurements</h2><p class="muted">Record normal heating or run a controlled cooldown, then follow recovery.</p></div>
-          <section id="source" class="card"></section>
+          <section id="measurement-choice" class="card"></section><section id="measurement-setup" class="card" hidden></section><section id="measurement-checks" class="card" hidden></section><section id="source" class="card"></section>
           <section id="lab" class="card lab" hidden></section>
           <section id="runs" class="card"></section><section id="run-detail" class="card" hidden></section>
         </section>
@@ -182,6 +182,7 @@ class ThermalPlannerPanel extends HTMLElement {
         tab.click(); tab.focus();
       });
     });
+    this.$("#outdoor-mode").onchange=()=>{this.$("#assumed-outdoor-field").hidden=this.$("#outdoor-mode").value!=="assumed";this.$("#assumed-outdoor").required=this.$("#outdoor-mode").value==="assumed";};
     this.$("#analyse-form").addEventListener("submit", (event) => { event.preventDefault(); this.analyse(); });
     this.$("#menu").addEventListener("click", () => this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true })));
     this.updateMenu();
@@ -206,6 +207,7 @@ class ThermalPlannerPanel extends HTMLElement {
       this.$("#entry-picker").hidden = entries.length <= 1;
       this.$("#entry").innerHTML = entries.map((entry) => `<option value="${escapeHTML(entry.entry_id)}">${escapeHTML(entry.title)}</option>`).join("");
       this.$("#entry").value = this.entryId || "";
+      if(this.lastEntryId !== this.entryId){this.lastEntryId=this.entryId;this.$("#history-policy").value=this.entry?.history_policy||"until_changed";this.setupOpen=false;this.$("#measurement-setup").hidden=true;}
       this.$("#analyse-card").hidden = !this.entry;
       if (!this.entry) {
         this.$("#saved-list").innerHTML = "<p>No accessible configuration.</p>";
@@ -224,7 +226,7 @@ class ThermalPlannerPanel extends HTMLElement {
       this.renderList();
       this.operations = await this.call("operations", { entry_id: this.entryId });
       this.labState = this.operations.control;
-      this.renderSource(); this.renderLab(); this.renderOperations();
+      this.renderSource(); this.renderMeasurementEntry(); this.renderLab(); this.renderOperations();
     } catch (error) { if (!silent) this.message(error.message || String(error), true); }
     finally { this.loading = false; }
   }
@@ -249,7 +251,7 @@ class ThermalPlannerPanel extends HTMLElement {
     this.busy = true; this.$("#analyse").disabled = true; this.$("#analyse").textContent = "Analysing…";
     this.message("Reading recorded temperatures and calculating the report…");
     try {
-      this.report = await this.call("analyse", { entry_id: this.entryId, start: this.$("#start").value, end: this.$("#end").value });
+      this.report = await this.call("analyse", { entry_id: this.entryId, start: this.$("#start").value, end: this.$("#end").value, history_policy:this.$("#history-policy").value, ...(this.$("#outdoor-mode").value === "assumed" ? {assumed_outdoor_c:Number(this.$("#assumed-outdoor").value)} : {}) });
       this.selected = this.report.id; this.windowIndex = 0; this.renderReport(); await this.refresh();
       this.message("Report saved. Review data coverage before interpreting cooling rates.");
     } catch (error) { this.message(error.message || String(error), true); }
@@ -301,6 +303,9 @@ class ThermalPlannerPanel extends HTMLElement {
     this.$("#report").innerHTML = `
       <div class="card"><div class="row"><h2>Temperature timeline</h2><button id="export">Export CSV</button></div>
         <p class="muted">${escapeHTML(this.time(r.start))} → ${escapeHTML(this.time(r.end))} · ${escapeHTML(this.zone)}</p>
+        ${r.unavailability_events?.length ? `<p class="notice">Recorded sensor outages are shown as gaps (${r.unavailability_events.length} events in this window). Earlier values are not carried through an outage.</p>` : ""}
+        ${r.outdoor_assumption_c != null ? `<p class="notice"><strong>Assumed outdoor temperature: ${number(r.outdoor_assumption_c,1)}°C throughout this report.</strong> Outside-normalized cooling results use this assumption, not measured weather.</p>` : ""}
+        <p><small>${r.data_policy?.history_policy === "until_changed" ? "Last known sensor readings are carried forward until the next recorded change. Recorded unavailability remains a gap; unrecorded outages cannot be detected." : "Readings expire at the configured historical freshness limit."}</small></p>
         ${this.chart(r)}
         <p><small>${escapeHTML(r.label)}. Residual heat and circulation can remain. Missing readings are shown as gaps.</small></p>
         ${r.contamination ? `<p class="warning">${escapeHTML(r.contamination)}</p>` : ""}
@@ -342,6 +347,97 @@ class ThermalPlannerPanel extends HTMLElement {
     } catch (error) { this.message(error.message || String(error), true); }
   }
 
+  renderMeasurementEntry() {
+    const root = this.$("#measurement-choice");
+    if (!root) return;
+    if (!this._hass.user?.is_admin){root.innerHTML="<h2>Measurement history</h2><p>You can review completed measurements below. A Home Assistant administrator can connect readings and start new measurements.</p>";return;}
+    if (!root.dataset.mounted) {
+      root.dataset.mounted = "true";
+      root.innerHTML = `<h2>What would you like to measure?</h2><div class="row"><button id="goal-observe" class="primary">Watch normal heating</button><button id="goal-cooldown">Controlled cooldown</button></div>
+        <p id="goal-help"></p><form id="observe-form"><label for="observe-minutes">Watch for (minutes)</label><input class="compact" id="observe-minutes" type="number" min="30" max="720" value="120" required><button type="submit">Observe normal operation</button></form>
+        <button id="setup-measurement" style="margin-top:14px">Set up measurement</button><div id="observation-progress" role="status"></div>`;
+      this.$("#goal-observe").onclick = ()=>this.setMeasurementGoal("observe");
+      this.$("#goal-cooldown").onclick = ()=>this.setMeasurementGoal("cooldown");
+      this.$("#setup-measurement").onclick = ()=>this.openMeasurementSetup();
+      this.$("#observe-form").onsubmit = event=>{event.preventDefault();this.operation("observe",{minutes:Number(this.$("#observe-minutes").value)});};
+    }
+    this.measurementGoal ||= (this.operations?.control?.journal || this.operations?.observation || this.operations?.campaign?.active ? "cooldown" : "observe");
+    this.$("#goal-help").textContent = this.measurementGoal === "observe" ? "Recommended first step. Record what your heating normally does. This does not change your heat pump and needs no pause/restore check." : "Pause the shared heat pump, then restore it and watch the rooms recover. Complete the checks below first. Water-temperature trials are optional and can wait.";
+    this.$("#observe-form").hidden = this.measurementGoal !== "observe";
+    this.$("#goal-observe").setAttribute("aria-pressed", String(this.measurementGoal === "observe"));
+    this.$("#goal-cooldown").setAttribute("aria-pressed", String(this.measurementGoal === "cooldown"));
+    const ops=this.operations, occupied=ops?.control?.journal || ops?.observation || ops?.baseline || ops?.campaign?.active || ops?.mode !== "advisory";
+    this.$("#observe-form button").disabled = Boolean(this.busy || occupied || ops?.readiness?.can_observe === false);
+    this.$("#observation-progress").innerHTML = ops?.control?.journal || ops?.observation ? `<p>A controlled measurement ${ops.observation ? "is observing recovery" : "is running"}. Use Stop to end it and restore any settings still owned by the planner.</p><button id="stop-active-measurement">Stop and restore</button>` : ops?.baseline ? `<p>Watching normal heating until ${escapeHTML(this.time(ops.baseline.deadline))}.</p><button id="stop-observation">Stop observation</button>` : "";
+    this.$("#stop-active-measurement")?.addEventListener("click",()=>this.operation("stop"));
+    this.$("#stop-observation")?.addEventListener("click",()=>this.operation("stop"));
+    const ready=ops?.readiness;
+    this.$("#measurement-checks").hidden = this.measurementGoal !== "cooldown" || !ready;
+    if(ready) {
+      this.$("#measurement-checks").innerHTML = `<h2>${ready.can_pause ? "Ready for a controlled cooldown" : "Before your first cooldown"}</h2><p>We check your actual HA readings. Fix the items below, then return here; these checks update automatically.</p>${ready.checks.filter(check=>!check.ready).map(check=>`<div style="padding:12px 0;border-bottom:1px solid var(--divider-color,#ccd8d6)"><strong>${check.ready ? "✓" : "○"} ${escapeHTML(check.title)}</strong><p>${escapeHTML(check.message)}</p>${check.action === "setup" ? '<button data-fix="setup">Choose heating control</button>' : check.action === "commission" ? `<button data-fix="${ops.source.commissioning_allowed ? "commission" : "setup"}">${ops.source.commissioning_allowed ? "Go to supervised check" : "Set up supervised check"}</button>` : check.action === "sensor" ? '<a href="/config/integrations/integration/thermal_planner">Review room sensors and freshness</a>' : check.action === "source" && check.entity_id ? `<button data-source="${escapeHTML(check.entity_id)}">Open heat pump control</button>` : ""}</div>`).join("")}<details style="margin-top:12px"><summary>View ${ready.checks.filter(check=>check.ready).length} ready checks</summary><ul>${ready.checks.filter(check=>check.ready).map(check=>`<li>${escapeHTML(check.title)} — ${escapeHTML(check.message)}</li>`).join("")}</ul></details>${!ready.checks.find(c=>c.title === "Pause and restore check")?.ready ? '<p>Use Set up measurement to allow the supervised check. Then start the one-minute check below while someone can observe the installation.</p>' : ""}`;
+      this.shadowRoot.querySelectorAll("[data-fix]").forEach(b=>b.onclick=()=>{if(b.dataset.fix === "commission"){this.$("#onsite")?.scrollIntoView({block:"center",behavior:"smooth"});this.$("#onsite")?.focus();}else this.openMeasurementSetup();});
+      this.shadowRoot.querySelectorAll("[data-source]").forEach(b=>b.onclick=()=>this.dispatchEvent(new CustomEvent("hass-more-info",{bubbles:true,composed:true,detail:{entityId:b.dataset.source}})));
+    }
+  }
+
+  setMeasurementGoal(goal) { this.measurementGoal=goal;this.renderMeasurementEntry();this.labSignature=null;this.renderLab(); }
+
+  openMeasurementSetup() {
+    this.setupOpen=true;
+    const source=this.operations.source, root=this.$("#measurement-setup");root.hidden=false;
+    const picker=(key,label,domain,selected,temperature=false)=>`<label for="setup-${key}">${label}</label><select id="setup-${key}"><option value="">${key === "climate" ? "No heat pump control — observation only" : "Not connected (optional)"}</option>${Object.entries(this._hass.states||{}).filter(([id,state])=>domain.includes(id.split(".")[0]) && (!temperature || ["°C","°F","K"].includes(state.attributes.unit_of_measurement))).map(([id,state])=>`<option value="${escapeHTML(id)}" ${id===selected?'selected':''}>${escapeHTML(state.attributes.friendly_name||id)} · ${escapeHTML(state.state)} ${escapeHTML(state.attributes.unit_of_measurement||"")} · ${escapeHTML(id)}</option>`).join("")}</select>`;
+    root.innerHTML=`<h2>Connect your heating readings</h2><p>Choose the entities already in Home Assistant. Saving these choices sends no heating commands. Room sensors remain the air-temperature sensors you already added.</p>
+      <details><summary>Help me match HeishaMon readings</summary><p>Save the JSON page from your HeishaMon as a file, then open it here. This is a one-time reference, not a new telemetry connection.</p><label for="heishamon-file">HeishaMon JSON file</label><input id="heishamon-file" type="file" accept=".json,application/json"><div id="heishamon-preview"></div><div class="scroll"><table><thead><tr><th>HeishaMon name</th><th>What to look for in HA</th></tr></thead><tbody><tr><td>Outside_Temp</td><td>Outdoor air temperature</td></tr><tr><td>Main_Outlet_Temp</td><td>Actual water leaving the pump</td></tr><tr><td>Main_Inlet_Temp</td><td>Returning water, for an optional zone reading</td></tr><tr><td>Main_Target_Temp</td><td>Requested water temperature, read only here</td></tr><tr><td>Operating_Mode_State</td><td>Heating versus hot water (DHW)</td></tr><tr><td>Defrosting_State</td><td>Defrost active indicator</td></tr><tr><td>Zones_State</td><td>Which pump zones are active</td></tr></tbody></table></div><p><strong>Heatpump_State is not proof that rooms are receiving heat.</strong> Pump_Flow is litres/minute, not a temperature. Z1/Z2 fields may exist even if only one zone is fitted. Keep your existing HA control integration; no MQTT setup is needed here.</p></details>
+      <form id="measurement-setup-form">${picker("climate","1. Which control switches your space heating between Heat and Off?",["climate"],source.climate)}
+      <p><small>Select the shared heating control, not the hot-water tank. If unsure, open the control in HA and check its modes. We do not guess this from the HeishaMon snapshot.</small></p>
+      ${picker("outdoor","2. Outdoor air temperature",["sensor"],this.entry?.outdoor||this.operations.current?.outdoor_source,true)}
+      <details><summary>Optional pump readings — add only what you recognise</summary>
+      ${picker("operating_mode","Heating or hot-water mode",["sensor","select"],source.operating_mode)}
+      <label for="setup-dhw_states">Which values mean hot water is being heated?</label><input id="setup-dhw_states" value="${escapeHTML((source.dhw_states||[]).join(","))}" placeholder="For example DHW, or the numeric value your HA sensor shows"><p><small>Use the value shown by the selected HA entity, not a number copied blindly from another installation.</small></p>
+      ${picker("defrost_indicator","Defrost active indicator",["binary_sensor","sensor"],source.defrost_indicator)}
+      ${picker("leaving_water","Actual water leaving the heat pump",["sensor"],source.leaving_water,true)}
+      ${picker("flow_readback","Requested heating-water temperature (read only)",["sensor","number","input_number"],source.flow_readback,true)}</details>
+      <label for="setup-age">How long may live readings go without being reported? (minutes)</label><input id="setup-age" type="number" min="1" max="1440" value="${this.entry?.max_age_minutes||30}" required><p><small>Live checks use HA's latest report time, even if the number did not change. Historical carry-forward is configured separately on Reports.</small></p>
+      <label><input id="setup-supervised" type="checkbox" ${source.commissioning_allowed?'checked':''}> I want to enable the supervised pause/restore check. Someone will be present when I start it.</label>
+      <p>This checkbox does not start the check or enable automatic heating.</p><button class="primary" type="submit">Save selected readings</button> <button id="cancel-setup" type="button">Cancel</button><p id="setup-error" role="alert" hidden></p></form>`;
+    this.$("#cancel-setup").onclick=()=>{this.setupOpen=false;root.hidden=true;};
+    this.$("#heishamon-file").onchange=async event=>{
+      try {
+        const file=event.target.files[0];if(!file)return;if(file.size>1024*1024)throw new Error("Choose a JSON file smaller than 1 MB.");
+        const raw=JSON.parse(await file.text());this.showHeishaMon(raw);
+      } catch(error){this.$("#heishamon-preview").textContent=error.message||"That file could not be read. Choose the JSON status file.";}
+    };
+    this.$("#measurement-setup-form").onsubmit=async event=>{
+      event.preventDefault();const values={};
+      for(const key of ["climate","outdoor","operating_mode","defrost_indicator","leaving_water","flow_readback"])values[key]=this.$(`#setup-${key}`).value||null;
+      values.dhw_states=this.$("#setup-dhw_states").value.split(",").map(s=>s.trim()).filter(Boolean);
+      values.commissioning_allowed=this.$("#setup-supervised").checked;values.max_age_minutes=Number(this.$("#setup-age").value);
+      const button=this.$("#measurement-setup-form button[type=submit]");button.disabled=true;
+      try {this.operations=await this.call("operations",{entry_id:this.entryId,action:"setup",setup:values});this.labState=this.operations.control;this.setupOpen=false;root.hidden=true;this.message("Readings saved. No heating commands were sent. Review the updated checks before starting.");this.labSignature=null;this.renderMeasurementEntry();this.renderSource();this.renderLab();}
+      catch(error){const box=this.$("#setup-error");box.hidden=false;box.textContent=error.message||String(error);button.disabled=false;}
+    };
+    root.scrollIntoView({block:"start",behavior:"smooth"});
+  }
+
+  showHeishaMon(raw) {
+    const rows=Object.values(raw||{}).filter(Array.isArray).flat().filter(r=>r&&typeof r.Name==="string");
+    if(!rows.length)throw new Error("No HeishaMon status fields found. Your existing choices have not changed.");
+    const fields={Outside_Temp:["outdoor","Outdoor air"],Main_Outlet_Temp:["leaving_water","Water leaving the pump"],Main_Target_Temp:["flow_readback","Requested water temperature"],Operating_Mode_State:["operating_mode","Space heating / hot water"],Defrosting_State:["defrost_indicator","Defrost indication"]};
+    const normalize=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,"");let html='<h3>Match this snapshot to Home Assistant</h3><p>Suggestions below are based on names only. Review the entity and current HA value before saving. Nothing is connected automatically.</p><ul>';
+    for(const row of rows){const field=fields[row.Name];if(!field)continue;const [key,label]=field;const select=this.$(`#setup-${key}`);
+      const candidates=Array.from(select.options).filter(o=>o.value&&normalize(o.textContent).includes(normalize(row.Name)));
+      html+=`<li><strong>${escapeHTML(label)}</strong>: ${escapeHTML(row.Name)} · ${escapeHTML(row.Value)} ${escapeHTML(row.Description)}${candidates.length===1?` <button type="button" data-suggestion="${key}" data-entity="${escapeHTML(candidates[0].value)}">Review suggested HA entity</button>`:' · Choose the matching HA entity above/below; names can differ.'}</li>`;
+    }
+    const zone=rows.find(r=>r.Name==="Zones_State"), mode=rows.find(r=>r.Name==="Operating_Mode_State");
+    for(const number of [1,2]){const sensor=rows.find(r=>r.Name===`Z${number}_Sensor_Settings`);if(sensor && /water/i.test(sensor.Description))html+=`<li>Zone ${number} uses a water sensor in this snapshot. Use separate room-air sensors for your rooms.</li>`;}
+    if(zone)html+=`<li>Zone status in snapshot: ${escapeHTML(zone.Description)}. This does not create or change zones.</li>`;
+    if(mode)html+=`<li>Current operating mode in snapshot: ${escapeHTML(mode.Description)}. A hot-water cycle can be a reason to wait before a cooldown.</li>`;
+    const invalid=rows.filter(r=>/Temp/.test(r.Name)&&[-78,-128].includes(Number(r.Value))).map(r=>r.Name);
+    html+=`</ul>${invalid.length?`<p>Likely unused temperature channels (${escapeHTML(invalid.join(", "))}) show sentinel values. Do not use them as room air sensors.</p>`:""}<p>Heatpump_State does not identify an HA climate control. Room sensors must measure room air; Z1_Temp may represent water depending on Z1_Sensor_Settings.</p>`;
+    this.$("#heishamon-preview").innerHTML=html;
+    this.shadowRoot.querySelectorAll("[data-suggestion]").forEach(button=>button.onclick=()=>{const select=this.$(`#setup-${button.dataset.suggestion}`);select.value=button.dataset.entity;select.focus();button.textContent="Selected for review — save when checked";});
+  }
+
   renderSource() {
     const source = this.operations?.source || this.entry?.heat_source || {};
     const rows = this.operations?.rooms || [];
@@ -356,7 +452,7 @@ class ThermalPlannerPanel extends HTMLElement {
   renderLab() {
     const state = this.labState, ops = this.operations;
     const root = this.$("#lab");
-    root.hidden = !this._hass.user?.is_admin || !state;
+    root.hidden = !this._hass.user?.is_admin || !state || this.measurementGoal !== "cooldown";
     if (root.hidden) return;
     const signature = JSON.stringify([state, ops.observation, ops.baseline, ops.campaign, ops.mode, this.busy]);
     if (signature === this.labSignature) return;
@@ -368,41 +464,41 @@ class ThermalPlannerPanel extends HTMLElement {
     const status = ({idle:"Ready",paused:"Climate paused",prepared:"Preparing operation",resuming:"Resuming heat",recovering:"Observing at trial flow",restoring:"Restoring original settings",restore_failed:"Restore needs attention",waiting_for_entity:"Waiting for source/readback"})[state.status] || state.status;
     const limit = source.pause_limit_minutes || 30;
     const busy = this.busy ? "disabled" : "";
-    const canStart = state.available && !active && !recovery && !baseline && !this.busy;
+    const canStart = (ops.readiness?.can_pause ?? state.available) && !active && !recovery && !baseline && !this.busy;
     root.innerHTML = `<div class="row"><h2>Controlled measurements</h2><span class="badge">${state.simulated ? "Development simulator" : state.available ? "Commissioned source" : "Observation only"}</span></div>
       <p>Run a bounded cooldown, restore the original settings, then observe recovery. Minimum-temperature and missing-data guards stay active for every room.</p>
       <p><strong>${escapeHTML(status)}</strong>${active ? ` · Restore deadline ${escapeHTML(this.time(active.recovery_deadline || active.deadline))}` : ""}${recovery ? ` · Recording recovery until ${escapeHTML(this.time(recovery.deadline))}` : ""}${baseline ? ` · Normal operation observation until ${escapeHTML(this.time(baseline.deadline))}` : ""}</p>
       ${active?.error ? `<p class="warning">${escapeHTML(active.error)}. Three restore attempts are allowed per retry sequence. Use Stop / retry restore after checking availability.</p>` : ""}
       ${!state.configured ? '<p>Choose the heat pump in Configure before starting measurements.</p>' : ""}
       ${state.configured && !state.available ? `<p>Pause/restore capability has not been commissioned for this source. Configuration alone does not enable control.</p>
-        ${source.commissioning_allowed ? `<label><input class="compact" id="onsite" type="checkbox"> I am on site and have checked the central Heat/Off actions, DHW/schedule interaction and safe restoration.</label><button id="commission" ${busy}>Start supervised 1-minute commissioning</button>` : '<p><small>After checking the installation, enable supervised commissioning in Heat pump settings. Starting it is a separate explicit action here.</small></p>'}` : ""}
+        ${source.commissioning_allowed ? `<label><input class="compact" id="onsite" type="checkbox"> I am on site and have checked the central Heat/Off actions, DHW/schedule interaction and safe restoration.</label><button id="commission" disabled>Start supervised 1-minute commissioning</button>` : '<p><small>After checking the installation, enable supervised commissioning in Heat pump settings. Starting it is a separate explicit action here.</small></p>'}` : ""}
       <form id="lab-form"><div><label for="minutes">Maximum pause (real minutes)</label><input id="minutes" type="number" min="1" max="${limit}" step="1" value="${Math.min(5,limit)}" required ${active || recovery ? "disabled" : ""}></div>
         <button class="primary" type="submit" ${canStart ? "" : "disabled"}>Run once</button>
         <button id="stop" type="button" ${active || recovery || baseline || campaign?.active || ops.mode !== "advisory" ? busy : "disabled"}>Stop / retry restore</button>
         <button id="campaign" type="button" ${state.available && ops.campaign_settings && !campaign?.active && !this.busy ? "" : "disabled"}>Start campaign</button></form>
       ${source.flow_setter ? `<form id="flow-form" style="margin-top:16px"><div><label for="trial-flow">Approved direct-flow trial (°C)</label><input id="trial-flow" type="number" min="${source.flow_min}" max="${source.flow_max}" step="0.1" value="${ops.current?.flow_target ?? source.flow_min}" required></div><button type="submit" ${canStart ? "" : "disabled"}>Start flow trial</button></form><p><small>Explicit range ${source.flow_min}–${source.flow_max}°C; maximum change ${source.flow_max_step}°C. A trial owns mode and flow through cooldown/recovery, then restores both. An untested lower flow is not treated as a proven saving.</small></p>` : ""}
-      <form id="observe-form" style="margin-top:16px"><div><label for="observe-minutes">Normal operation (minutes)</label><input id="observe-minutes" type="number" min="30" max="720" step="1" value="120" required></div><button type="submit" ${active || recovery || baseline || this.busy ? "disabled" : ""}>Observe normal operation</button></form><p><small>Read-only observation sends no heating commands and does not require commissioning. It can provide stable, measured heat-demand windows and naturally occurring heating/cooling evidence.</small></p>
       ${campaign ? `<details ${campaign.active ? "open" : ""}><summary>Campaign · ${campaign.active ? "active" : "stopped"} · ${campaign.completed}/${campaign.settings.nights} completed</summary><p>Next local date: ${escapeHTML(campaign.next_date)}. Ends ${escapeHTML(campaign.settings.end_date)}.</p><ul>${campaign.skips.map(skip=>`<li>${escapeHTML(skip.date)}: ${escapeHTML(skip.reason)}</li>`).join("") || "<li>No skipped nights.</li>"}</ul></details>` : '<p><small>Configure nightly time, target count and end date under Campaign schedule before starting a campaign.</small></p>'}
       <p><small>Each pause is bounded by an absolute real-time deadline. HA cannot restore a device while HA is offline; interrupted ownership is reconciled on restart. Simulator temperatures can be accelerated.</small></p>
       ${run ? `<details ${active ? "open" : ""}><summary>${active ? "Active control journal" : "Last source operation"}</summary><p><small>${escapeHTML(run.reason || "Bounded measurement in progress.")}${run.outcome ? ` · ${escapeHTML(run.outcome)}` : ""}</small></p><ol class="events">${(run.events||[]).map(event=>`<li>${escapeHTML(this.time(event.at))} · ${escapeHTML(event.message)}</li>`).join("")}</ol></details>` : ""}`;
     this.$("#lab-form").addEventListener("submit", event=>{event.preventDefault();this.operation("run",{minutes:Number(this.$("#minutes").value)});});
     this.$("#stop").addEventListener("click",()=>this.operation("stop"));
     this.$("#campaign").addEventListener("click",()=>this.operation("campaign"));
+    this.$("#onsite")?.addEventListener("change",()=>{this.$("#commission").disabled=!this.$("#onsite").checked || this.busy || ops.readiness?.can_commission===false;});
     this.$("#commission")?.addEventListener("click",()=>this.operation("commission",{acknowledged:this.$("#onsite").checked}));
     this.$("#flow-form")?.addEventListener("submit",event=>{event.preventDefault();this.operation("trial",{minutes:Number(this.$("#minutes").value),flow_target:Number(this.$("#trial-flow").value)});});
-    this.$("#observe-form")?.addEventListener("submit",event=>{event.preventDefault();this.operation("observe",{minutes:Number(this.$("#observe-minutes").value)});});
+
   }
 
   async operation(action, data={}) {
     if (this.busy) return;
-    this.busy = true; this.renderLab(); this.renderOperations();
+    this.busy = true; this.renderMeasurementEntry(); this.renderLab(); this.renderOperations();
     this.message(({fit:"Fitting room models and checking holdout periods…",replan:"Fetching hourly forecasts and checking comfort margins…",run:"Saving the control journal and requesting a bounded pause…",trial:"Checking flow limits and saving original settings…",stop:"Stopping scheduled actions and reconciling owned settings…"})[action] || "Processing source operation…");
     try {
       this.operations = await this.call("operations",{entry_id:this.entryId,action,...data});
       this.labState = this.operations.control;
       this.message(action === "run" && this.labState?.status === "paused" ? "Bounded pause started. The journal and restore deadline are saved." : "Operation processed. Review its outcome and evidence below.");
     } catch(error) {this.message(error.message||String(error),true);await this.refresh(true);}
-    finally {this.busy=false;this.renderSource();this.renderLab();this.renderOperations();}
+    finally {this.busy=false;this.renderSource();this.renderMeasurementEntry();this.renderLab();this.renderOperations();}
   }
 
   renderOperations() {
