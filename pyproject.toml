@@ -11,7 +11,7 @@ Repository = "https://github.com/ajmckee/warmy-warm"
 Issues = "https://github.com/ajmckee/warmy-warm/issues"
 
 [project.optional-dependencies]
-test = ["homeassistant==2026.3.0", "pytest>=8", "pytest-asyncio>=1", "voluptuous-serialize", "ruff"]
+test = ["homeassistant==2026.7.0", "pytest>=8", "pytest-asyncio>=1", "voluptuous-serialize", "ruff"]
 test-ui = ["playwright==1.65.2"]
 
 [tool.pytest.ini_options]
